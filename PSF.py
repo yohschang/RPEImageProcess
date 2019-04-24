@@ -3,34 +3,40 @@ import os
 import matplotlib.pyplot as plt
 from scipy.fftpack import fft, ifft
 
+
 def normalize(d):
     # d is a (n x dimension) np array
     d -= np.min(d, axis=0)
     d /= np.ptp(d, axis=0)
     return d
 
-path = r"/home/bt/文件/bosi_optics/DPM_verify/bead_xprofile.txt"
-# os.chdir(path)
 
-x = []
-y = []
-with open(path, 'r') as f:
-    row = f.readlines()
-    for i in row:
-        x.append(i.split("\t")[0])
-        y.append(i.split("\t")[1].strip("\n"))
-x = np.array(x).astype(float)
-y = np.array(y).astype(float)
+def read_profile(path):
+    x = []
+    y = []
+    with open(path, 'r') as f:
+        row = f.readlines()
+        for i in row:
+            x.append(i.split("\t")[0])
+            y.append(i.split("\t")[1].strip("\n"))
+    x = np.array(x).astype(float)
+    y = np.array(y).astype(float)
+    return x, y
+
+
+def runnung_mean(y,window):
+    y = np.convolve(y, np.ones((window,)) / window, mode='same')
+    return y
+
+path = r"/home/bt/文件/bosi_optics/DPM_verify/bead_xprofile.txt"
+x, y = read_profile(path)
+path_psf = path_psf = r"/home/bt/文件/bosi_optics/DPM_verify/std_PSF_1um.txt"
+x_psf, y_psf = read_profile(path_psf)
 
 # centralize
-x = x-139
+x = x-138
 # moving average
-moving_window = 1  # no moving window
-y = np.convolve(y, np.ones((moving_window,))/moving_window, mode='same')
-# background 0
-# for i in range(len(x)):
-#     if (abs(x[i])>47):
-#         y[i] = 0
+y = runnung_mean(y, 1)
 
 # hight adjust
 buf = []
@@ -38,7 +44,7 @@ for i, j in zip(x, y):
     if (i<-75) or (i>75):
         buf.append(j)
 base = np.mean(buf)
-y = y - base
+y = y - base+0.05
 
 n = 1.598
 n0 = 1.566
@@ -80,7 +86,7 @@ y_ii = normalize(y_i)
 
 buf = []
 for i,j in zip(x,y_ii):
-    if (i>-20) and (i<0):
+    if (i>-30) and (i<-6):
         if (abs(j-0.5)<=0.2):
             um = i * 5.5 /46.5
             buf.append(um)
@@ -114,3 +120,40 @@ plt.xticks(np.arange(min(x), max(x)+1, 1))
 plt.ylabel("au")
 plt.xlim(-5,5)
 plt.show()
+
+####################################################
+## forward simulation
+#
+# # um
+# x_sample = x_ideal*5.5/46.5
+# y_sample = y_ideal
+#
+# y_idealmeasure = np.convolve(y_psf, y_sample, mode='same')
+# for i in range(len(x_sample)):
+#     if (x_sample[i] <= -11) or (x_sample[i] >= 11):
+#         y_idealmeasure[i] = 27
+# y_idealmeasure = normalize(y_idealmeasure)
+#
+# # reverse
+# yf_test = fft(y_idealmeasure)
+# yf_test_idealsample = fft(normalize(y_sample))
+#
+# y_testpsf = ifft(yf_test/yf_test_idealsample)
+#
+# plt.figure(4, dpi=250)
+# plt.plot(x_sample, y_idealmeasure, label="ideal measure")
+# plt.legend()
+# plt.title("ideal measurement")
+# plt.xlabel("x(um)")
+# plt.ylabel("au")
+# plt.show()
+#
+# plt.figure(5, dpi=250)
+# plt.plot(x_sample, runnung_mean(y_testpsf, 4), label="test psf")
+# plt.legend()
+# plt.title("test psf")
+# plt.xlabel("x(um)")
+# plt.ylabel("au")
+# plt.xticks(np.arange(min(x), max(x)+1, 1))
+# plt.xlim(-5,5)
+# plt.show()

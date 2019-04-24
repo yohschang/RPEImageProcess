@@ -6,17 +6,22 @@ from sympy import *
 
 def jinc(x):
     return spl.j1(x) / x
+def normalize(d):
+    # d is a (n x dimension) np array
+    d -= np.min(d, axis=0)
+    d /= np.ptp(d, axis=0)
+    return d
 
 # mm
 # aperture
-r = 1
+r = 0.5
 # wavelength
 Lambda_ = 0.000532
 # focal length
-f = 1.5
+f = 2
 
 # formula
-x = np.linspace(-0.02,0.02,2000)
+x = np.linspace(-0.02,0.02,268)
 y = np.pi*(r**2)*jinc(2*np.pi*r*abs(x)/(Lambda_ * f))
 # normalize
 # y = (y-min(y)) / (max(y)-min(y))
@@ -31,10 +36,21 @@ for i in range(len(x)):
         right = x[i]
         print(right*1000000,'nm')
 print(right*1000000-left*1000000,'nm')
+x = 1000*x
+
+y = normalize(y)
+
+# output PSF
+path_psf = r"/home/bt/文件/bosi_optics/DPM_verify/std_PSF_1um.txt"
+with open(path_psf, "wt") as f:
+    for i in range(len(x)):
+        f.write(str(x[i])+"\t"+str(y[i])+"\n")
+
+
 plt.figure(1)
-plt.plot(1000000*x,y)
-plt.xlabel('x (nm)')
+plt.plot(x,y)
+plt.xlabel('x (um)')
 plt.ylabel('y')
-plt.xlim(-2000,2000)
+plt.xlim(-10,10)
 # plt.ylim(-0.1,1.2)
 plt.show()
