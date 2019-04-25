@@ -182,7 +182,7 @@ y_ii = normalize(y_i)
 
 ####################################################
 
-y_sinconv = np.convolve(normalize(y_sin), y_ideal, mode='valid')  # 3701
+y_sinconv = np.convolve(y_sin, y_ideal, mode='valid')  # 3701
 # zeros padding
 y_sinconv_f = np.zeros(150)
 y_sinconv_f = np.concatenate((y_sinconv_f, y_sinconv))
@@ -191,15 +191,13 @@ y_sinconv_f = np.concatenate((y_sinconv_f, np.zeros(149)))
 
 plt.figure(6, dpi=250)
 plt.plot(x_sin, y_sin, label="sin (3/period)")
-plt.legend()
 plt.title("sin (3/period)")
 plt.xlabel("x")
 plt.ylabel("au")
 plt.show()
 
 plt.figure(8, dpi=250)
-plt.plot(x_ideal, normalize(y_sinconv_f), label="sin")
-plt.legend()
+plt.plot(x_ideal, y_sinconv_f, label="sin")
 plt.title("conv result")
 plt.xlabel("x")
 plt.ylabel("au")
@@ -207,29 +205,29 @@ plt.show()
 
 
 plt.figure(7, dpi=250)
-plt.plot(x_ideal, normalize(y_ideal), label="ideal bead")
+plt.plot(x_ideal, y_ideal, label="ideal bead")
 plt.legend()
-plt.title("sin")
+plt.title("ideal bead")
 plt.xlabel("x")
 plt.ylabel("au")
 plt.show()
 
 # fft
-yf_sinconv = fft(normalize(y_sinconv_f))
-yf_ideal = fft(normalize(y_ideal))
+yf_sinconv = fft(y_sinconv_f)
+yf_ideal = fft(y_ideal)
 
 #
-xr, yr, xf_plot1, yf_plot1 = gofft(x_ideal, normalize(y_ideal))
-xr, yr, xf_plot2, yf_plot2 = gofft(x_ideal, normalize(y_sinconv_f))
-plt.figure(9, dpi=250)
-plt.plot(xf_plot1, yf_plot1, label="ideal")
-plt.plot(xf_plot2, yf_plot2, label="afterconv")
-plt.legend()
-plt.title("F domain")
-plt.xlabel("x")
-plt.xlim(0,50)
-plt.ylabel("au")
-plt.show()
+# xr, yr, xf_plot1, yf_plot1 = gofft(x_ideal, y_ideal)
+# xr, yr, xf_plot2, yf_plot2 = gofft(x_ideal, y_sinconv_f)
+# plt.figure(9, dpi=250)
+# plt.plot(xf_plot1, yf_plot1, label="ideal")
+# plt.plot(xf_plot2, yf_plot2, label="afterconv")
+# plt.legend()
+# plt.title("F domain")
+# plt.xlabel("x")
+# plt.xlim(0,50)
+# plt.ylabel("au")
+# plt.show()
 
 # compute sin
 y_testsin = ifft(np.divide(yf_sinconv, yf_ideal))
@@ -242,7 +240,6 @@ for i in range(150):
 
 plt.figure(8, dpi=250)
 plt.plot(x_sin, final, label="sin")
-plt.legend()
 plt.title("sin?")
 plt.xlabel("x")
 plt.ylabel("au")
