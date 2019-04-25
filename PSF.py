@@ -1,7 +1,7 @@
 import numpy as np
-import os
 import matplotlib.pyplot as plt
 from scipy.fftpack import fft, ifft
+from scipy import interpolate
 
 
 def normalize(d):
@@ -24,27 +24,20 @@ def read_profile(path):
     return x, y
 
 
+def gofft(x,y):
+    # measured FFT
+    yf = fft(y)    # 取絕對值
+    yf1 = abs(fft(y))/len(x)   #歸一化處理
+    yf2 = yf1[range(int(len(x)/2))] #由於對稱性，只取一半區間
+    xf = np.arange(len(y))  # 頻率
+    xf1 = xf
+    xf2 = xf[range(int(len(x)/2))] #取一半區間
+    return xf, yf, xf2, yf2
+
+
 def runnung_mean(y,window):
     y = np.convolve(y, np.ones((window,)) / window, mode='same')
     return y
-
-path = r"E:\DPM\20190420_mag\xprofile_DPMBead.txt"
-x, y = read_profile(path)
-path_psf = path_psf = r"E:\DPM\20190420_mag\std_PSF_1um.txt"
-x_psf, y_psf = read_profile(path_psf)
-
-# centralize
-x = x-164
-# moving average
-y = runnung_mean(y, 1)
-
-# hight adjust
-buf = []
-for i, j in zip(x, y):
-    if (i<-75) or (i>75):
-        buf.append(j)
-base = np.mean(buf)
-y = y - base+0.05
 
 
 def ideal_bead(beadradius):
@@ -52,7 +45,7 @@ def ideal_bead(beadradius):
     n0 = 1.566
     beadradius_at_ccd = beadradius*46.5/5.5  # 42.27 pixel
     # compute ideal bead
-    x_ideal = np.arange(x[0], x[len(x)-1]+1)
+    x_ideal = np.arange(-200, 200, 0.1)  # 4000
     h = []
     for i in x_ideal:
         if (abs(i) < beadradius_at_ccd):
@@ -65,68 +58,90 @@ def ideal_bead(beadradius):
     return x_ideal, y_ideal
 
 
-for k in np.arange(4.815, 4.82,0.05):
-    print(k)
-    x_ideal, y_ideal = ideal_bead(k)
+def interplo(x, y, number):
+    f = interpolate.interp1d(x, y)
+    xnew = np.arange(x[0], x[len(x)-1], (x[len(x)-1]-x[0])/number)
+    ynew = f(xnew)  # use interpolation function returned by `interp1d`
+    return xnew, ynew
 
-    # measured FFT
-    yf = fft(y)    # 取絕對值
-    yf1 = abs(fft(y))/len(x)   #歸一化處理
-    yf2 = yf1[range(int(len(x)/2))] #由於對稱性，只取一半區間
-    xf = np.arange(len(y))  # 頻率
-    xf1 = xf
-    xf2 = xf[range(int(len(x)/2))] #取一半區間
-    # ideal FFT
-    yf_ideal = fft(y_ideal)   # 取絕對值
-    yf1_ideal = abs(fft(y_ideal))/len(x_ideal)   #歸一化處理
-    yf2_ideal = yf1_ideal[range(int(len(x_ideal)/2))] #由於對稱性，只取一半區間
-    xf_ideal = np.arange(len(y_ideal))  # 頻率
-    xf1_ideal = xf_ideal
-    xf2_ideal = xf1_ideal[range(int(len(x_ideal)/2))] #取一半區間
+####################################################################
 
-    # over in F domain
-    over = yf/yf_ideal
-    # inverse FT
-    y_i = ifft(over)
-    # normalize
-    y_ii = normalize(y_i)
+# loading data
+path = r"/home/bt/文件/bosi_optics/DPM_verify/bead_xprofile.txt"
+x, y = read_profile(path)
+x, y = interplo(x, y, 4000)
 
-    buf = []
-    for i,j in zip(x,y_ii):
-        if (i>-30) and (i<-6):
-            if (abs(j-0.5)<=0.2):
-                um = i * 5.5 /46.5
-                buf.append(um)
-                print(um)
+path_psf = r"/home/bt/文件/bosi_optics/DPM_verify/std_PSF_1um.txt"
+x_psf, y_psf = read_profile(path_psf)
 
-    #plot
-    plt.figure(1, dpi=300)
-    plt.plot(x, y, label="measurement")
-    plt.plot(x_ideal, y_ideal, label="ideal")
-    plt.legend()
-    plt.title("raw profile of bead")
-    plt.xlabel("x(pixel)")
-    plt.ylabel("phase")
-    plt.show()
+path_sin = r"/home/bt/文件/bosi_optics/DPM_verify/sinwave.txt"
+x_sin, y_sin = read_profile(path_sin)
 
-    plt.figure(2, dpi=250)
-    plt.plot(xf2, yf2, label="measurement")
-    plt.plot(xf2_ideal, yf2_ideal, label="ideal")
-    plt.legend()
-    plt.title("FFT")
-    plt.xlabel("freq")
-    plt.ylabel("au")
-    plt.show()
 
-    plt.figure(3, dpi=250)
-    plt.plot(x*5.5/46.5, y_ii, label="PSF")
-    plt.legend()
-    plt.title(str(k)+"PSF")
-    plt.xlabel("x(um)")
-    plt.xticks(np.arange(min(x), max(x)+1, 1))
-    plt.ylabel("au")
-    plt.xlim(-5,5)
-    plt.show()
+# centralize
+x = x-138
+# moving average
+y = runnung_mean(y, 1)
+
+# hight adjust
+buf = []
+for i, j in zip(x, y):
+    if (i<-75):
+        buf.append(j)
+base = np.mean(buf)
+y = y - base
+
+x_ideal, y_ideal = ideal_bead(4.8)
+
+# measured FFT
+xf, yf, xf2, yf2 = gofft(x, y)
+
+# ideal FFT
+xf_ideal, yf_ideal, xf2_ideal, yf2_ideal = gofft(x_ideal, y_ideal)
+
+# over in F domain
+over = np.divide(yf, yf_ideal)
+# inverse FT
+y_i = ifft(over)
+# normalize
+y_ii = normalize(y_i)
+
+# buf = []
+# for i,j in zip(x,y_ii):
+#     if (i>-30) and (i<-6):
+#         if (abs(j-0.5)<=0.2):
+#             um = i * 5.5 /46.5
+#             buf.append(um)
+#             print(um)
+
+#plot
+# plt.figure(1, dpi=300)
+# plt.plot(x, y, label="measurement")
+# plt.plot(x_ideal, y_ideal, label="ideal")
+# plt.legend()
+# plt.title("raw profile of bead")
+# plt.xlabel("x(pixel)")
+# plt.ylabel("phase")
+# plt.show()
+#
+# plt.figure(2, dpi=250)
+# plt.plot(xf2, yf2, label="measurement")
+# plt.plot(xf2_ideal, yf2_ideal, label="ideal")
+# plt.legend()
+# plt.title("FFT")
+# plt.xlabel("freq")
+# plt.ylabel("au")
+# plt.show()
+#
+# plt.figure(3, dpi=250)
+# plt.plot(x*5.5/46.5, y_ii, label="PSF")
+# plt.legend()
+# plt.title("PSF")
+# plt.xlabel("x(um)")
+# plt.xticks(np.arange(min(x), max(x)+1, 1))
+# plt.ylabel("au")
+# plt.xlim(-5,5)
+# plt.show()
 
 ####################################################
 ## forward simulation
@@ -164,3 +179,72 @@ for k in np.arange(4.815, 4.82,0.05):
 # plt.xticks(np.arange(min(x), max(x)+1, 1))
 # plt.xlim(-5,5)
 # plt.show()
+
+####################################################
+
+y_sinconv = np.convolve(normalize(y_sin), y_ideal, mode='valid')  # 3701
+# zeros padding
+y_sinconv_f = np.zeros(150)
+y_sinconv_f = np.concatenate((y_sinconv_f, y_sinconv))
+y_sinconv_f = np.concatenate((y_sinconv_f, np.zeros(149)))
+
+
+plt.figure(6, dpi=250)
+plt.plot(x_sin, y_sin, label="sin (3/period)")
+plt.legend()
+plt.title("sin (3/period)")
+plt.xlabel("x")
+plt.ylabel("au")
+plt.show()
+
+plt.figure(8, dpi=250)
+plt.plot(x_ideal, normalize(y_sinconv_f), label="sin")
+plt.legend()
+plt.title("conv result")
+plt.xlabel("x")
+plt.ylabel("au")
+plt.show()
+
+
+plt.figure(7, dpi=250)
+plt.plot(x_ideal, normalize(y_ideal), label="ideal bead")
+plt.legend()
+plt.title("sin")
+plt.xlabel("x")
+plt.ylabel("au")
+plt.show()
+
+# fft
+yf_sinconv = fft(normalize(y_sinconv_f))
+yf_ideal = fft(normalize(y_ideal))
+
+#
+xr, yr, xf_plot1, yf_plot1 = gofft(x_ideal, normalize(y_ideal))
+xr, yr, xf_plot2, yf_plot2 = gofft(x_ideal, normalize(y_sinconv_f))
+plt.figure(9, dpi=250)
+plt.plot(xf_plot1, yf_plot1, label="ideal")
+plt.plot(xf_plot2, yf_plot2, label="afterconv")
+plt.legend()
+plt.title("F domain")
+plt.xlabel("x")
+plt.xlim(0,50)
+plt.ylabel("au")
+plt.show()
+
+# compute sin
+y_testsin = ifft(np.divide(yf_sinconv, yf_ideal))
+
+final = np.zeros(300)
+for i in range(150, 300):
+    final[i] = y_testsin[i-150]
+for i in range(150):
+    final[i] = y_testsin[3850+i]
+
+plt.figure(8, dpi=250)
+plt.plot(x_sin, final, label="sin")
+plt.legend()
+plt.title("sin?")
+plt.xlabel("x")
+plt.ylabel("au")
+# plt.xticks(np.arange(min(x), max(x)+1, 1))
+plt.show()
