@@ -24,8 +24,11 @@ f = 2
 x = np.linspace(-0.02,0.02,268)
 y = np.pi*(r**2)*jinc(2*np.pi*r*abs(x)/(Lambda_ * f))
 # normalize
+
+
 # y = (y-min(y)) / (max(y)-min(y))
 t = (max(y)-min(y))/2.0
+t = 0
 for i in range(len(x)):
     if (y[i-1] < t) and (y[i] >= t):
         l = y[i]
@@ -41,7 +44,7 @@ x = 1000*x
 # y = normalize(y)
 
 # output PSF
-path_psf = r"E:\DPM\20190420_mag/std_PSF_1um.txt"
+path_psf = r"/home/bt/文件/bosi_optics/DPM_verify/std_PSF_1um.txt"
 with open(path_psf, "wt") as f:
     for i in range(len(x)):
         f.write(str(x[i])+"\t"+str(y[i])+"\n")
