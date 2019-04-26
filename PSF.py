@@ -1,7 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.fftpack import fft, ifft
+from scipy.fftpack import fft, ifft, fftshift, ifftshift, fftn, ifftn
 from scipy import interpolate
+
+
+def deconvolve(star, psf):
+    star_fft = fftshift(fftn(star))
+    psf_fft = fftshift(fftn(psf))
+    return fftshift(ifftn(ifftshift(star_fft/psf_fft)))
+
+
+def convolve(star, psf):
+    star_fft = fftshift(fftn(star))
+    psf_fft = fftshift(fftn(psf))
+    return fftshift(ifftn(ifftshift(star_fft*psf_fft)))
 
 
 def normalize(d):
@@ -40,21 +52,22 @@ def runnung_mean(y,window):
     return y
 
 
-def ideal_bead(beadradius):
+def ideal_bead(beadradius, length_of_profile):
     n = 1.598
     n0 = 1.566
-    beadradius_at_ccd = beadradius*46.5/5.5  # 42.27 pixel
+    beadradius_at_ccd = beadradius  # 42.27 pixel
     # compute ideal bead
-    x_ideal = np.arange(-200, 200, 0.1)  # 4000
+    half = length_of_profile/2
+    x_ideal = np.arange(-half, half, length_of_profile/4001)  # 31.5727 um ; 4001 points
     h = []
     for i in x_ideal:
-        if (abs(i) < beadradius_at_ccd):
+        if abs(i) < beadradius_at_ccd:
             h.append(2*np.sqrt(beadradius_at_ccd**2-i**2))
         else:
             h.append(0)
     h = np.array(h)
-    # h (pixel)
-    y_ideal = 2*np.pi/532*(h*5.5/46.5*1000)*(n-n0)
+    # h (um)
+    y_ideal = 2*np.pi/532*(h*1000)*(n-n0)
     return x_ideal, y_ideal
 
 
@@ -64,15 +77,50 @@ def interplo(x, y, number):
     ynew = f(xnew)  # use interpolation function returned by `interp1d`
     return xnew, ynew
 
+
+def from_idealpsf_to_computepsf(y_sin, y_ideal):
+    # y_sin -> 300
+    # y_ideal -> 4000
+
+    # convulotion
+    y_sinconv = np.convolve(y_sin, y_ideal, mode='valid')  # 3701
+
+    # zeros padding
+    y_sinconv_f = np.zeros(150)
+    y_sinconv_f = np.concatenate((y_sinconv_f, y_sinconv))
+    y_sinconv_f = np.concatenate((y_sinconv_f, np.zeros(149)))
+
+    # fft
+    yf_sinconv = fft(y_sinconv_f)
+    yf_ideal = fft(y_ideal)
+
+    # plot F domain
+    # xr, yr, xf_plot1, yf_plot1 = gofft(x_ideal, y_ideal)
+    # xr, yr, xf_plot2, yf_plot2 = gofft(x_ideal, y_sinconv_f)
+
+    # resume sin
+    y_testsin = ifft(np.divide(yf_sinconv, yf_ideal))
+
+    # take the head and tail
+    final = np.zeros(300)
+    for i in range(150, 300):
+        final[i] = y_testsin[i - 150]
+    for i in range(150):
+        final[i] = y_testsin[3850 + i]
+    return final, y_sinconv_f
+
 ####################################################################
 
 # loading data
 path = r"/home/bt/文件/bosi_optics/DPM_verify/bead_xprofile.txt"
 x, y = read_profile(path)
-x, y = interplo(x, y, 4000)
+x, y = interplo(x, y, 4001)
+# y = runnung_mean(y,300)
+length_of_profile = x[4000] - x[0]
 
 path_psf = r"/home/bt/文件/bosi_optics/DPM_verify/std_PSF_1um.txt"
 x_psf, y_psf = read_profile(path_psf)
+# x_psf, y_psf = interplo(x_psf, y_psf, 4001)
 
 path_sin = r"/home/bt/文件/bosi_optics/DPM_verify/sinwave.txt"
 x_sin, y_sin = read_profile(path_sin)
@@ -80,50 +128,86 @@ x_sin, y_sin = read_profile(path_sin)
 
 # centralize
 x = x-138
+# pixel to um
+toum = 5.5/46.5  # 0.11827
+x = x*toum
 # moving average
-y = runnung_mean(y, 1)
+# y = runnung_mean(y, 100)
 
 # hight adjust
 buf = []
 for i, j in zip(x, y):
-    if (i<-75):
+    if i < -5.5:
         buf.append(j)
 base = np.mean(buf)
 y = y - base
 
-x_ideal, y_ideal = ideal_bead(4.8)
+# # background 0
+# for i in range(len(x)):
+#     if (x[i] <= -55) or (x[i] >= 55):
+#         y[i] = 0
 
-# measured FFT
-xf, yf, xf2, yf2 = gofft(x, y)
 
-# ideal FFT
-xf_ideal, yf_ideal, xf2_ideal, yf2_ideal = gofft(x_ideal, y_ideal)
+# 4.78
+# for k in np.arange(4.75,4.85,0.01):
+k = 4.78
+x_ideal, y_ideal = ideal_bead(k, length_of_profile)
 
-# over in F domain
-over = np.divide(yf, yf_ideal)
-# inverse FT
-y_i = ifft(over)
-# normalize
-y_ii = normalize(y_i)
+# # measured FFT
+# xf, yf, xf2, yf2 = gofft(x, y)
 
-# buf = []
-# for i,j in zip(x,y_ii):
-#     if (i>-30) and (i<-6):
-#         if (abs(j-0.5)<=0.2):
-#             um = i * 5.5 /46.5
-#             buf.append(um)
-#             print(um)
+# # ideal FFT
+# xf_ideal, yf_ideal, xf2_ideal, yf2_ideal = gofft(x_ideal, y_ideal)
+
+# fft
+# yf_conv = fft(y)
+# yf_ideal = fft(y_ideal)
+
+# plot F domain
+# xr, yr, xf_plot1, yf_plot1 = gofft(x_ideal, y_ideal)
+# xr, yr, xf_plot2, yf_plot2 = gofft(x_ideal, y_sinconv_f)
+
+# resume sin
+# y_resumepsf = ifft(np.divide(yf_conv, yf_ideal))
+
+for i in x_psf:
+    if not i:
+        print("here")
+        
+print("y:",y.shape, type(y[0]))
+print("y:",y_ideal.shape, type(y_ideal[0]))
+print("y:",y_psf.shape, type(y_psf[0]))
+y_resumepsf = deconvolve(y, y_ideal)
+y_resumebead = deconvolve(y, y_psf)
+y_sinconv_f = convolve(y_ideal, y_psf)
+
+# take the head and tail
+# final = np.zeros(300)
+# for i in range(150, 300):
+#     final[i] = y_resumepsf[i - 150]
+# for i in range(150):
+#     final[i] = y_resumepsf[3850 + i]
 
 #plot
-# plt.figure(1, dpi=300)
+# plt.figure(dpi=300)
 # plt.plot(x, y, label="measurement")
 # plt.plot(x_ideal, y_ideal, label="ideal")
 # plt.legend()
 # plt.title("raw profile of bead")
-# plt.xlabel("x(pixel)")
+# plt.xlabel("x(um)")
+# plt.xlim(-15, 15)
 # plt.ylabel("phase")
 # plt.show()
-#
+
+plt.figure(dpi=300)
+plt.plot(x, y, label="measurement")
+plt.plot(x_ideal, 3.7*normalize(y_sinconv_f), label="ideal measurement")
+plt.legend()
+plt.title("raw profile of bead")
+plt.xlabel("x(um)")
+# plt.xlim(-15, 15)
+plt.ylabel("phase")
+plt.show()
 # plt.figure(2, dpi=250)
 # plt.plot(xf2, yf2, label="measurement")
 # plt.plot(xf2_ideal, yf2_ideal, label="ideal")
@@ -132,93 +216,89 @@ y_ii = normalize(y_i)
 # plt.xlabel("freq")
 # plt.ylabel("au")
 # plt.show()
-#
-# plt.figure(3, dpi=250)
-# plt.plot(x*5.5/46.5, y_ii, label="PSF")
-# plt.legend()
-# plt.title("PSF")
-# plt.xlabel("x(um)")
+
+plt.figure(dpi=250)
+plt.plot(x, y_resumepsf, label="PSF")
+plt.legend()
+plt.title("PSF")
+plt.xlabel("x(um)")
 # plt.xticks(np.arange(min(x), max(x)+1, 1))
-# plt.ylabel("au")
-# plt.xlim(-5,5)
-# plt.show()
+plt.xlim(-5,5)
+plt.ylabel("au")
+plt.show()
+
+plt.figure(dpi=250)
+plt.plot(x, y_resumebead, label="y_resumebead")
+plt.legend()
+plt.title("y_resumebead")
+plt.xlabel("x(um)")
+# plt.xticks(np.arange(min(x), max(x)+1, 1))
+plt.ylabel("au")
+plt.show()
 
 ####################################################
 ## forward simulation
-#
-# # um
-# x_sample = x_ideal*5.5/46.5
+
+# um
+# x_sample = x_ideal
 # y_sample = y_ideal
 #
-# y_idealmeasure = np.convolve(y_psf, y_sample, mode='same')
-# for i in range(len(x_sample)):
-#     if (x_sample[i] <= -11) or (x_sample[i] >= 11):
-#         y_idealmeasure[i] = 27
-# y_idealmeasure = normalize(y_idealmeasure)
+# y_sinconv_f = convolve(y_ideal, y_psf)
+# final_psf = deconvolve(y_sinconv_f, y_ideal)
+# # final_psf, y_sinconv_f = from_idealpsf_to_computepsf(y_psf, y_ideal)
 #
-# # reverse
-# yf_test = fft(y_idealmeasure)
-# yf_test_idealsample = fft(normalize(y_sample))
+# plt.figure(4, dpi=500)
+# plt.plot(x_sample, normalize(y_sample), label="ideal bead",linewidth=2)
+# plt.title("ideal bead")
+# plt.xlabel("x(um)")
+# plt.ylabel("au")
+# plt.xlim(-10,10)
+# plt.show()
 #
-# y_testpsf = ifft(yf_test/yf_test_idealsample)
-#
-# plt.figure(4, dpi=250)
-# plt.plot(x_sample, y_idealmeasure, label="ideal measure")
-# plt.legend()
+# plt.figure(11, dpi=500)
+# plt.plot(x_sample, normalize(y_sinconv_f), label="ideal measure",linewidth=2)
 # plt.title("ideal measurement")
 # plt.xlabel("x(um)")
 # plt.ylabel("au")
+# plt.xlim(-10,10)
 # plt.show()
 #
 # plt.figure(5, dpi=250)
-# plt.plot(x_sample, runnung_mean(y_testpsf, 4), label="test psf")
+# plt.plot(x_psf, runnung_mean(final_psf, 1), label="test psf")
 # plt.legend()
 # plt.title("test psf")
 # plt.xlabel("x(um)")
 # plt.ylabel("au")
-# plt.xticks(np.arange(min(x), max(x)+1, 1))
-# plt.xlim(-5,5)
+# # plt.xticks(np.arange(min(x), max(x)+1, 1))
+# plt.xlim(-2.5, 2.5)
 # plt.show()
 
 ####################################################
+# test sin wave
+# final = from_idealpsf_to_computepsf(y_sin, y_ideal)
 
-y_sinconv = np.convolve(y_sin, y_ideal, mode='valid')  # 3701
-# zeros padding
-y_sinconv_f = np.zeros(150)
-y_sinconv_f = np.concatenate((y_sinconv_f, y_sinconv))
-y_sinconv_f = np.concatenate((y_sinconv_f, np.zeros(149)))
-
-
-plt.figure(6, dpi=250)
-plt.plot(x_sin, y_sin, label="sin (3/period)")
-plt.title("sin (3/period)")
-plt.xlabel("x")
-plt.ylabel("au")
-plt.show()
-
-plt.figure(8, dpi=250)
-plt.plot(x_ideal, y_sinconv_f, label="sin")
-plt.title("conv result")
-plt.xlabel("x")
-plt.ylabel("au")
-plt.show()
-
-
-plt.figure(7, dpi=250)
-plt.plot(x_ideal, y_ideal, label="ideal bead")
-plt.legend()
-plt.title("ideal bead")
-plt.xlabel("x")
-plt.ylabel("au")
-plt.show()
-
-# fft
-yf_sinconv = fft(y_sinconv_f)
-yf_ideal = fft(y_ideal)
-
+# plt.figure(6, dpi=250)
+# plt.plot(x_sin, y_sin, label="sin (3/period)")
+# plt.title("sin (3/period)")
+# plt.xlabel("x")
+# plt.ylabel("au")
+# plt.show()
 #
-# xr, yr, xf_plot1, yf_plot1 = gofft(x_ideal, y_ideal)
-# xr, yr, xf_plot2, yf_plot2 = gofft(x_ideal, y_sinconv_f)
+# plt.figure(8, dpi=250)
+# plt.plot(x_ideal, y_sinconv_f, label="sin")
+# plt.title("conv result")
+# plt.xlabel("x")
+# plt.ylabel("au")
+# plt.show()
+#
+# plt.figure(7, dpi=250)
+# plt.plot(x_ideal, y_ideal, label="ideal bead")
+# plt.legend()
+# plt.title("ideal bead")
+# plt.xlabel("x")
+# plt.ylabel("au")
+# plt.show()
+
 # plt.figure(9, dpi=250)
 # plt.plot(xf_plot1, yf_plot1, label="ideal")
 # plt.plot(xf_plot2, yf_plot2, label="afterconv")
@@ -229,19 +309,10 @@ yf_ideal = fft(y_ideal)
 # plt.ylabel("au")
 # plt.show()
 
-# compute sin
-y_testsin = ifft(np.divide(yf_sinconv, yf_ideal))
-
-final = np.zeros(300)
-for i in range(150, 300):
-    final[i] = y_testsin[i-150]
-for i in range(150):
-    final[i] = y_testsin[3850+i]
-
-plt.figure(8, dpi=250)
-plt.plot(x_sin, final, label="sin")
-plt.title("sin?")
-plt.xlabel("x")
-plt.ylabel("au")
-# plt.xticks(np.arange(min(x), max(x)+1, 1))
-plt.show()
+# plt.figure(8, dpi=250)
+# plt.plot(x_sin, final, label="sin")
+# plt.title("sin?")
+# plt.xlabel("x")
+# plt.ylabel("au")
+# # plt.xticks(np.arange(min(x), max(x)+1, 1))
+# plt.show()

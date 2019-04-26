@@ -14,33 +14,31 @@ def normalize(d):
 
 # mm
 # aperture
-r = 0.5
+# r = 1.23
 # wavelength
 Lambda_ = 0.000532
 # focal length
-f = 2
+# f = 1.5
+# NA
+NA = 0.5
+
 
 # formula
-x = np.linspace(-0.02,0.02,268)
-y = np.pi*(r**2)*jinc(2*np.pi*r*abs(x)/(Lambda_ * f))
-# normalize
+x = np.linspace(-0.01579, 0.01579, 4001)  # total 31.57 um ; 4001 points
+# y = np.pi*(r**2)*jinc(2*np.pi*r*abs(x)/(Lambda_ * f))
+b = 2*np.pi/Lambda_*NA*abs(x)
+y = 2*jinc(b)
+x = 1000*x  # mm to um
 
-
-# y = (y-min(y)) / (max(y)-min(y))
-t = (max(y)-min(y))/2.0
 t = 0
+rlist, llist = [], []
 for i in range(len(x)):
-    if (y[i-1] < t) and (y[i] >= t):
-        l = y[i]
-        left = x[i]
-        print(left*1000000,'nm')
-    if (y[i-1] > t) and (y[i] <= t):
-        rr = y[i]
-        right = x[i]
-        print(right*1000000,'nm')
-print(right*1000000-left*1000000,'nm')
-x = 1000*x
-
+    if (y[i] <= 0.0001) and ((x[i] >= -0.8) and (x[i] <= 0.8)):
+        if x[i]<0:
+            rlist.append(x[i])
+        else:
+            llist.append(x[i])
+print("null width:", round(llist[int(len(llist)/2)] - rlist[int(len(rlist)/2)], 3), "um")
 # y = normalize(y)
 
 # output PSF
@@ -54,6 +52,6 @@ plt.figure(1)
 plt.plot(x,y)
 plt.xlabel('x (um)')
 plt.ylabel('y')
-plt.xlim(-10,10)
+plt.xlim(-2.5,2.5)
 # plt.ylim(-0.1,1.2)
 plt.show()
