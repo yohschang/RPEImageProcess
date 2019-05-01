@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fftpack import fft, ifft, fftshift, ifftshift, fftn, ifftn
-from scipy import interpolate as interer
+from scipy import interpolate
 import scipy.special as spl
 
 
@@ -72,8 +72,8 @@ def ideal_bead(beadradius, length_of_profile):
     return x_ideal, y_ideal
 
 
-def interplott(t_x, t_y, number):
-    f = interer.interp1d(t_x, t_y)
+def interplo(t_x, t_y, number):
+    f = interpolate.interp1d(t_x, t_y)
     xnew = np.arange(t_x[0], t_x[len(t_x)-1], (t_x[len(t_x)-1]-t_x[0])/number)
     ynew = f(xnew)  # use interpolation function returned by `interp1d`
     return xnew, ynew
@@ -148,18 +148,16 @@ def from_idealpsf_to_computepsf(y_sin, y_ideal, area):
 ####################################################################
 
 
-# loading data
+# loading measurement data
 path = r"/home/bt/文件/bosi_optics/DPM_verify/bead_xprofile.txt"
 x, y = read_profile(path)
-x, y = interplott(x, y, 4000)
+x, y = interplo(x, y, 4000)
 # centralize
 x = x-138
 # pixel to um
 toum = 5.5/46.5  # 0.11827
 x = x*toum
 length = x[3999] - x[0]  # 31.57 um
-# moving average
-# y = runnung_mean(y, 100)
 
 # formula_psf
 x_psf, y_psf, area_under_psf = formula_psf(0.000532, 0.5, length)
@@ -178,50 +176,68 @@ k = 5
 x_ideal, y_ideal = ideal_bead(k, length)
 
 y_final, rr = from_idealpsf_to_computepsf(y_psf, y_ideal, area_under_psf)
-
+y_final = y_final / max(y_final)
 # y_resumepsf = deconvolve(y, y_ideal)
 # y_resumebead = deconvolve(y, y_psf)
 # y_sinconv_f = convolve(y_ideal, y_psf)
 
 ####################################################################
 # plot
-plt.figure(dpi=200)
-plt.plot(x_psf, y_psf)
-plt.xlabel('x (um)')
-plt.ylabel('y')
-plt.xlim(-5, 5)
-plt.title("PSF from formula")
+x_test = [1,2,3]
+
+fig, axs = plt.subplots(1, 3, figsize=[15, 6])
+axs[0].plot(x_psf, y_psf)
+axs[0].set_title("PSF from formula")
+axs[0].set_xlabel('x (um)')
+axs[0].set_ylabel('a.u.')
+axs[0].set_xlim(-5, 5)
+
+# axs[1].plot(x, y, label="measurement")
+axs[1].plot(x_ideal, y_ideal, label="ideal")
+axs[1].plot(x_ideal, rr, label="psf conv ideal")
+axs[1].legend()
+axs[1].set_title("profile of bead")
+axs[1].set_xlabel('x (um)')
+axs[1].set_ylabel('phase')
+axs[1].set_xlim(-15, 15)
+
+axs[2].plot(x_psf, y_final, label="PSF")
+axs[2].set_title("retrieved PSF")
+axs[2].set_xlabel('x (um)')
+axs[2].set_ylabel('a.u.')
+axs[2].set_xlim(-5, 5)
+
+plt.tight_layout()
 plt.show()
 
-plt.figure(dpi=300)
-plt.plot(x, y, label="measurement")
-plt.plot(x_ideal, y_ideal, label="ideal")
-plt.plot(x_ideal, rr, label="psf conv ideal")
-plt.legend()
-plt.title("raw profile of bead")
-plt.xlabel("x(um)")
-plt.xlim(-15, 15)
-plt.ylabel("phase")
-plt.show()
+# plt.figure(dpi=200)
+# plt.plot(x_psf, y_psf)
+# plt.xlabel('x (um)')
+# plt.ylabel('y')
+# plt.xlim(-5, 5)
+# plt.title("PSF from formula")
+# plt.show()
+#
+# plt.figure(dpi=300)
+# plt.plot(x, y, label="measurement")
+# plt.plot(x_ideal, y_ideal, label="ideal")
+# plt.plot(x_ideal, rr, label="psf conv ideal")
+# plt.legend()
+# plt.title("raw profile of bead")
+# plt.xlabel("x(um)")
+# plt.xlim(-15, 15)
+# plt.ylabel("phase")
+# plt.show()
+#
+# plt.figure(dpi=250)
+# plt.plot(x_psf, y_final, label="PSF")
+# plt.legend()
+# plt.title("retrieved PSF")
+# plt.xlabel("x(um)")
+# # plt.xticks(np.arange(min(x), max(x)+1, 1))
+# plt.xlim(-5,5)
+# plt.ylabel("au")
+# plt.show()
 
-plt.figure(dpi=250)
-plt.plot(x_psf, y_final, label="PSF")
-plt.legend()
-plt.title("PSF")
-plt.xlabel("x(um)")
-# plt.xticks(np.arange(min(x), max(x)+1, 1))
-plt.xlim(-5,5)
-plt.ylabel("au")
-plt.show()
-
-plt.figure(dpi=250)
-plt.plot(x_ideal, rr, label="Y_psfconv")
-plt.legend()
-plt.title("conv ideal bead and PSF")
-plt.xlabel("x(um)")
-plt.xlim(-15,15)
-# plt.xticks(np.arange(min(x), max(x)+1, 1))
-plt.ylabel("au")
-plt.show()
 
 
