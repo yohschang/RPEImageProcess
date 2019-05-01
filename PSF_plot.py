@@ -37,8 +37,7 @@ def formula_psf(Lambda_, NA, points):
     return x_psf, y_psf
 
 
-x,y = formula_psf(0.000532, 0.35, 1200)
-
+x, y = formula_psf(0.000532, 0.35, 1200)
 
 
 # output PSF

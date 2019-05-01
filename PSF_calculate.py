@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fftpack import fft, ifft, fftshift, ifftshift, fftn, ifftn
 from scipy import interpolate as interer
-from sympy import *
 import scipy.special as spl
 
 
@@ -86,8 +85,8 @@ def jinc(x):
 
 def formula_psf(Lamb, NA, leng):
     # setting
-    points = 300
-    t_length = (leng/4000) * points / 1000 / 2
+    points = 1200
+    t_length = (leng/4000) * points / 1000 / 2  # 31.57 um / 4000 points
 
     # formula (mm)
     x_psf_f = np.linspace(-t_length, t_length, points)  # 2.36 um 300 points
@@ -106,24 +105,23 @@ def formula_psf(Lamb, NA, leng):
                 llist.append(x_psf_f[i])
     print("null width:", round(llist[int(len(llist) / 2)] - rlist[int(len(rlist) / 2)], 3), "um")
 
-    return x_psf_f, y_psf_f
+    return x_psf_f, y_psf_f, np.sum(y_psf_f)
 
 
-def from_idealpsf_to_computepsf(y_sin, y_ideal):
-    # y_sin -> 600
-    # y_ideal -> 4001
-    print("y_sin:", y_sin.shape)
-    print("y_ideal:", y_ideal.shape)
+def from_idealpsf_to_computepsf(y_sin, y_ideal, area):
+    # print("y_sin:", y_sin.shape)
+    # print("y_ideal:", y_ideal.shape)
 
     # convolution
-    y_sinconv = np.convolve(y_sin, y_ideal, mode='valid')  # 3402
+    y_sinconv = np.convolve(y_sin, y_ideal, mode='valid')/area  # 3402
 
     # zeros padding
     padding_length = y_ideal.shape[0] - y_sinconv.shape[0]
     y_sinconv_f = np.zeros(round(padding_length/2))
     y_sinconv_f = np.concatenate((y_sinconv_f, y_sinconv))
     y_sinconv_f = np.concatenate((y_sinconv_f, np.zeros(int(padding_length/2))))
-
+    print("y_sinconv:", y_sinconv.shape)
+    print("y_ideal:", y_ideal.shape)
     # fft
     yf_sinconv = fft(y_sinconv_f)
     yf_ideal = fft(y_ideal)
@@ -149,6 +147,7 @@ def from_idealpsf_to_computepsf(y_sin, y_ideal):
 
 ####################################################################
 
+
 # loading data
 path = r"/home/bt/文件/bosi_optics/DPM_verify/bead_xprofile.txt"
 x, y = read_profile(path)
@@ -163,14 +162,7 @@ length = x[3999] - x[0]  # 31.57 um
 # y = runnung_mean(y, 100)
 
 # formula_psf
-x_psf, y_psf = formula_psf(0.000532, 0.35, length)
-print(type(y_psf))
-# path_psf = r"/home/bt/文件/bosi_optics/DPM_verify/std_PSF_1um.txt"
-# x_psf, y_psf = read_profile(path_psf)
-# y_psf = 1000 * y_psf
-
-path_sin = r"/home/bt/文件/bosi_optics/DPM_verify/sinwave.txt"
-x_sin, y_sin = read_profile(path_sin)
+x_psf, y_psf, area_under_psf = formula_psf(0.000532, 0.5, length)
 
 # hight adjust
 buf = []
@@ -185,33 +177,26 @@ y = y - base
 k = 5
 x_ideal, y_ideal = ideal_bead(k, length)
 
-y_final, rr = from_idealpsf_to_computepsf(y_psf, y_ideal)
+y_final, rr = from_idealpsf_to_computepsf(y_psf, y_ideal, area_under_psf)
 
-# print("y:", y.shape, type(y[0]))
-# print("y_ideal:", y_ideal.shape, type(y_ideal[0]))
-# print("y_psf:", y_psf.shape, type(y_psf[0]))
-
-y_resumepsf = deconvolve(y, y_ideal)
-
+# y_resumepsf = deconvolve(y, y_ideal)
 # y_resumebead = deconvolve(y, y_psf)
 # y_sinconv_f = convolve(y_ideal, y_psf)
-print("mark")
-ran = max(rr)-0
 
-#plot
+####################################################################
+# plot
 plt.figure(dpi=200)
 plt.plot(x_psf, y_psf)
 plt.xlabel('x (um)')
 plt.ylabel('y')
 plt.xlim(-5, 5)
 plt.title("PSF from formula")
-# plt.ylim(-0.1,1.2)
 plt.show()
 
 plt.figure(dpi=300)
 plt.plot(x, y, label="measurement")
 plt.plot(x_ideal, y_ideal, label="ideal")
-plt.plot(x_ideal, max(y_ideal) * (rr / ran), label="psf conv ideal")
+plt.plot(x_ideal, rr, label="psf conv ideal")
 plt.legend()
 plt.title("raw profile of bead")
 plt.xlabel("x(um)")
@@ -239,14 +224,4 @@ plt.xlim(-15,15)
 plt.ylabel("au")
 plt.show()
 
-
-# plt.figure(dpi=250)
-# plt.plot(x_ideal, y_resumepsf, label="y_resumepsf")
-# plt.legend()
-# plt.title("y_resumepsf")
-# plt.xlabel("x(um)")
-# # plt.xlim(-15,15)
-# # plt.xticks(np.arange(min(x), max(x)+1, 1))
-# plt.ylabel("au")
-# plt.show()
 
