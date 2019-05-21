@@ -149,7 +149,7 @@ def from_idealpsf_to_computepsf(y_sin, y_ideal, area):
 
 
 # loading measurement data
-path = r"/home/bt/文件/bosi_optics/DPM_verify/bead_xprofile.txt"
+path = r"C:\Users\BT\PycharmProjects\untitled1\xprofile_DPMBead.txt"
 x, y = read_profile(path)
 x, y = interplo(x, y, 4000)
 # centralize
