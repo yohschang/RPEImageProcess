@@ -11,18 +11,35 @@ def round_all_the_entries_ndarray(matrix, decimal):
     return matrix
 
 
+def check_file_exist(this_path):
+    my_file = Path(this_path)
+    if not my_file.exists():
+        raise OSError("Cannot find image!")
+
+
 class BT_image(object):
     """docstring"""
     def __init__(self, path):
-        my_file = Path(path)
-        if not my_file.exists():
-            raise OSError("Cannot find image!")
-        img = cv2.imread(path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        self.img = img
+        check_file_exist(path)
+        self.path = path
+        self.img = None
         self.name = path.split("\\")[-1]
         self.board = None
         self.flat_board = None
+
+    def open_image(self):
+        img = cv2.imread(self.path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        self.img = img
+
+    def open_raw_image(self):
+        fd = open(self.path, 'rb')
+        rows = 3072
+        cols = 3072
+        f = np.fromfile(fd, dtype=np.float32, count=rows * cols)
+        im_real = f.reshape((rows, cols))
+        fd.close()
+        self.img = im_real
 
     def beadcenter2croprange(self, x, y):
         return x - 84, y - 84
@@ -33,7 +50,7 @@ class BT_image(object):
         x, y = self.beadcenter2croprange(x_center, y_center)
         self.img = self.img[y:y+h, x:x+w]
 
-    def crop_img2circle(self):
+    def crop_img2circle_after_crop_it_to_tiny_square(self):
         """choose the area of bead and append to a list"""
         radius = 50  # pixel
         self.board = np.zeros((self.img.shape[0], self.img.shape[0]))
@@ -44,6 +61,15 @@ class BT_image(object):
                 if (i - centerx)**2 + (j - centery)**2 <= 3136:
                     self.board[i, j] = self.img[i, j]
                     self.flat_board.append(self.img[i, j])
+
+    def crop_img2circle(self, centerx, centery, radius):
+        self.flat_board = []
+        # self.board = np.zeros((self.img.shape[0], self.img.shape[1]))
+        for i in range(self.img.shape[0]):
+            for j in range(self.img.shape[1]):
+                if (i - centerx)**2 + (j - centery)**2 <= radius**2:
+                    self.flat_board.append(self.img[i, j])
+                    # self.board[i, j] = self.img[i, j]
 
     def write_image(self, path):
         cv2.imwrite(path + self.name.split(".")[0] + "_circle.bmp", self.img)

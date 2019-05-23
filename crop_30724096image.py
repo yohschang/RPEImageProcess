@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from btimage import BT_image
 from btimage import round_all_the_entries_ndarray
-
+import tqdm
 
 def stack(path, file_name):
     buffer = np.zeros((3072, 3072))
@@ -35,8 +35,9 @@ center_list = [[265, 2792],
 
 im_square = []
 im_circle = []
-for i in range(len(list_)):
+for i in tqdm.trange(len(list_)):
     img_tem = BT_image(list_[i])
+    img_tem.open_image()
     img_tem.crop(center_list[i][0], center_list[i][1])
     img_tem.normalize_after_crop()
     # img_tem.plot_it()
@@ -44,7 +45,7 @@ for i in range(len(list_)):
     im_square.append(img_tem.img.flatten())
 
     # circle
-    img_tem.crop_img2circle()
+    img_tem.crop_img2circle_after_crop_it_to_tiny_square()
     img_tem.plot_board()
     im_circle.append(img_tem.flat_board)
 
