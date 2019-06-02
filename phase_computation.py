@@ -7,9 +7,9 @@ import tqdm
 
 p = "E:\\DPM\\20190602_check_python\\"
 implement = PhaseCombo(p)
-# implement.combo(shift1=-1, shift2=1.2)
-# implement.npy2png()
-implement.combo(target=2)
+implement.combo(shift1=-1, shift2=1.2)
+implement.npy2png()
+# implement.combo(target=2)
 
 # circel_mean = []
 # # read from npy file

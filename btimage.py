@@ -186,6 +186,8 @@ class PhaseRetrieval(object):
         # open img
         self.sp.open_image()
         self.bg.open_image()
+        check_img_size(self.sp.img)
+        check_img_size(self.bg.img)
 
         # FFT
         self.sp.twodfft()
@@ -359,8 +361,6 @@ class PhaseCombo(object):
                     pr.plot_final(center=False)
                     pr.plot_sp_bg()
                     pr.plot_fdomain()
-
-
 
     def npy2png(self):
         output_dir = self.root + "phase_npy//"
