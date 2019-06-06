@@ -117,7 +117,6 @@ class BT_image(object):
     def find_centroid(self):
         # determine threshold
         thres = np.mean(self.img) + 0.7
-        print(thres)
         # threshold image
         ret, self.threshold = cv2.threshold(self.img, thres, 0, cv2.THRESH_TOZERO)
         # centroid
@@ -145,22 +144,23 @@ class BT_image(object):
         # step 7
         img_back = cv2.idft(f_ishift)  # complex ndarray [:,:,0]--> real
         # step 8
-        self.iff = np.arctan(np.divide(img_back[:, :, 1], img_back[:, :, 0]))
+        self.iff = np.arctan2(img_back[:, :, 1], img_back[:, :, 0])
         self.test = img_back
         img_back = cv2.magnitude(img_back[:, :, 0],img_back[:, :, 1])
         return img_back
 
-    def crop_first_order(self):
-        x_start = 1536 - 384
+    def crop_first_order(self, sx, sy, size):
+
+        x_start = 1536 - size//2
         y_start = 0
-        width = 768
-        height = 768
+        width = size
+        height = size
 
         # find the approximate area to crop
-        tem_crop = 20 * np.log(self.f_domain[y_start:y_start + 768, x_start:x_start + 768])
+        tem_crop = 20 * np.log(self.f_domain[0:0 + 768, (1536 - 384):(1536 - 384) + 768])
         max_y, max_x = np.unravel_index(np.argmax(tem_crop), tem_crop.shape)
-        x_final = x_start + max_x
-        y_final = y_start + max_y
+        x_final = x_start + max_x + sx
+        y_final = y_start + max_y + sy
         crop_f_domain_test = 20 * np.log(self.f_domain[y_final-width//2:y_final+width//2, x_final-height//2:x_final+height//2])
         self.crop_f_domain = self.f_domain[y_final-width//2:y_final+width//2, x_final-height//2:x_final+height//2]
 
@@ -180,6 +180,8 @@ class PhaseRetrieval(object):
         self.wrapped_bg = None
         self.unwarpped_sp = None
         self.unwarpped_bg = None
+        self.final_sp = None
+        self.final_bg = None
         self.final = None
 
     def phase_retrieval(self):
@@ -194,27 +196,28 @@ class PhaseRetrieval(object):
         self.bg.twodfft()
 
         # crop real or virtual image
-        self.sp.crop_first_order()
-        self.bg.crop_first_order()
+        self.sp.crop_first_order(-2, 0, 765)
+        self.bg.crop_first_order(0, 0, 768)
 
         # iFFT
         self.sp.twodifft(self.sp.crop_raw_f_domain)
         self.bg.twodifft(self.bg.crop_raw_f_domain)
-        self.wrapped_sp = 2 * self.sp.iff
-        self.wrapped_bg = 2 * self.bg.iff
+        self.wrapped_sp = self.sp.iff
+        self.wrapped_bg = self.bg.iff
 
         # unwapping
-        self.unwarpped_sp = unwrap_phase(self.wrapped_sp)/2
-        self.unwarpped_bg = unwrap_phase(self.wrapped_bg)/2
-
-        # subtract
-        self.final = self.unwarpped_sp - self.unwarpped_bg
+        self.unwarpped_sp = unwrap_phase(self.wrapped_sp)
+        self.unwarpped_bg = unwrap_phase(self.wrapped_bg)
 
         # resize
-        self.final = self.resize_image(self.final, 3072)
+        self.final_sp = self.resize_image(self.unwarpped_sp, 3072)
+        self.final_bg = self.resize_image(self.unwarpped_bg, 3072)
+
+        # subtract
+        self.final = self.final_sp - self.final_bg
 
     def resize_image(self, image, size):
-        return cv2.resize(image, (size, size), interpolation=cv2.INTER_AREA)
+        return cv2.resize(image, (size, size), interpolation=cv2.INTER_CUBIC)
 
     def plot_fdomain(self):
         fig, axes = plt.subplots(nrows=1, ncols=2, dpi=200, figsize=(25, 10))
@@ -244,9 +247,9 @@ class PhaseRetrieval(object):
         """beware of Memory"""
         plt.figure(dpi=200, figsize=(10, 10))
         if center:
-            plt.imshow(self.final[1500:1700, 1500:1700], cmap='gray', vmin=-1, vmax=5)
+            plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=5)
         else:
-            plt.imshow(self.final, cmap='gray', vmin=-1, vmax=5)
+            plt.imshow(self.final, cmap='jet', vmin=-1, vmax=3.5)
         plt.colorbar()
         plt.title("sp - bg")
         plt.show()
@@ -295,7 +298,7 @@ class ShiftPi(object):
         self.mean_list = np.array(self.mean_list)
         self.mean_list = np.mean(self.mean_list, axis=1)
         plt.figure()
-        plt.hist(self.mean_list, bins=3)
+        plt.hist(self.mean_list, bins=20)
         plt.title("before shift")
         plt.xlabel("phase")
         plt.ylabel("count")
@@ -332,7 +335,7 @@ class PhaseCombo(object):
         if len(self.pathsp_list) != len(self.pathbg_list):
             raise AssertionError("SP length and BG length do not match!")
 
-    def combo(self, target=-1, shift1=-1, shift2=1):
+    def combo(self, target=-1, shift1=-1, shift2=1, save=False):
         # output
         output_dir = self.root + "phase_npy//"
         if not path.exists(output_dir):
@@ -342,8 +345,12 @@ class PhaseCombo(object):
         if target == -1:
             for i in tqdm.trange(len(self.pathsp_list)):
                 pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[i])
-                pr.phase_retrieval()
-                pr.write_final(output_dir)
+                try:
+                    pr.phase_retrieval()
+                    if save:
+                        pr.write_final(output_dir)
+                except TypeError as e:
+                    print(i, "th cannot be retrieved ", e)
 
             # shift pi
             print("Shift pi...")
@@ -361,6 +368,8 @@ class PhaseCombo(object):
                     pr.plot_final(center=False)
                     pr.plot_sp_bg()
                     pr.plot_fdomain()
+                    if save:
+                        pr.write_final(output_dir)
 
     def npy2png(self):
         output_dir = self.root + "phase_npy//"
