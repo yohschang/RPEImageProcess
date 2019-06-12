@@ -65,40 +65,40 @@ r = 3072//2
 # plt.show()
 
 # reconstruction temporal noise
-# path = "E:\\DPM\\20190529\\circle_temporal.npy"
-# tem_noise = np.load(path)
-# k = 0
-# ze = np.zeros((3072, 3072))
-# for i in tqdm.trange(3072):
-#     for j in range(3072):
-#         if (i - 3072//2)**2 + (j - 3072//2)**2 <= (3072//2)**2:
-#             ze[i, j] = tem_noise[k]
-#             k += 1
-#
-# plt.figure(dpi=300)
-# plt.imshow(ze, cmap='jet', vmax=0.08, vmin=0.0)
-# cb = plt.colorbar()
-# cb.ax.set_title('rad')
-# plt.title("Temporal noise in FOV (500 frames)")
-# plt.show()
-
-path = "E:\\DPM\\20190521_8position\\time\\1\\BG\\bg.bmp.phimap"
-im = BT_image(path)
-im.open_raw_image()
-# im.plot_it(im.img)
+path = "E:\\DPM\\20190529\\circle_temporal.npy"
+tem_noise = np.load(path)
 k = 0
 ze = np.zeros((3072, 3072))
 for i in tqdm.trange(3072):
     for j in range(3072):
         if (i - 3072//2)**2 + (j - 3072//2)**2 <= (3072//2)**2:
-            ze[i, j] = im.img[i, j]
+            ze[i, j] = tem_noise[k]
             k += 1
 
 plt.figure(dpi=300)
-plt.imshow(ze, cmap="jet",  vmax=-0.1, vmin=0.1)
+plt.imshow(ze, cmap='jet', vmax=0.08, vmin=0.0)
 cb = plt.colorbar()
 cb.ax.set_title('rad')
-
-plt.title("Spatial noise in FOV (1 frame)")
+plt.title("Temporal noise in FOV (500 frames)")
 plt.show()
+
+# path = "E:\\DPM\\20190521_8position\\time\\1\\BG\\bg.bmp.phimap"
+# im = BT_image(path)
+# im.open_raw_image()
+# # im.plot_it(im.img)
+# k = 0
+# ze = np.zeros((3072, 3072))
+# for i in tqdm.trange(3072):
+#     for j in range(3072):
+#         if (i - 3072//2)**2 + (j - 3072//2)**2 <= (3072//2)**2:
+#             ze[i, j] = im.img[i, j]
+#             k += 1
+#
+# plt.figure(dpi=300)
+# plt.imshow(ze, cmap="jet",  vmax=-0.1, vmin=0.1)
+# cb = plt.colorbar()
+# cb.ax.set_title('rad')
+#
+# plt.title("Spatial noise in FOV (1 frame)")
+# plt.show()
 

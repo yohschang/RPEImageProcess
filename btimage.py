@@ -3,10 +3,26 @@ from os import path, makedirs
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 from skimage.restoration import unwrap_phase
 from random import randint
 import glob
 import tqdm
+
+# green colorbar
+cdict1 = {'red': ((0.0, 0.0, 0.0),
+                  (0.0, 0.0, 0.0),
+                  (1.0, 0.0, 0.0)),
+
+          'green': ((0.0, 0.0, 0.0),
+                    (0.15, 0.0, 0.0),
+                    (1.0, 1.0, 1.0)),
+
+          'blue': ((0.0, 0.0, 0.0),
+                   (0.15, 0.0, 0.0),
+                   (1.0, 0.5, 0.5))
+          }
+green = LinearSegmentedColormap('green', cdict1)
 
 
 def round_all_the_entries_ndarray(matrix, decimal):
@@ -49,9 +65,10 @@ class BT_image(object):
         self.iff = None
         self.test = None
 
-    def open_image(self):
+    def open_image(self, color="g"):
         img = cv2.imread(self.path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if color == "g":
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         self.img = img
 
     def opennpy(self):
@@ -73,8 +90,8 @@ class BT_image(object):
         return x - 84, y - 84
 
     def crop(self, x_center, y_center):
-        w = 300
-        h = 300
+        w = 168
+        h = 168
         x, y = self.beadcenter2croprange(x_center, y_center)
         self.img = self.img[y:y+h, x:x+w]
 
@@ -84,11 +101,12 @@ class BT_image(object):
         self.board = np.zeros((self.img.shape[0], self.img.shape[0]))
         self.flat_board = []
 
-        for i in range(self.img.shape[0]):
-            for j in range(self.img.shape[0]):
-                if (i - centerx)**2 + (j - centery)**2 <= radius**2:
-                    self.board[i, j] = self.img[i, j]
-                    self.flat_board.append(self.img[i, j])
+        # for i in range(self.img.shape[0]):
+        #     for j in range(self.img.shape[0]):
+        #         if (i - centerx)**2 + (j - centery)**2 <= radius**2:
+        #             self.board[i, j] = self.img[i, j]
+        #             self.flat_board.append(self.img[i, j])
+        self.board = self.img
 
     def crop_img2circle(self, centerx, centery, radius):
         self.flat_board = []
@@ -249,14 +267,15 @@ class PhaseRetrieval(object):
         if center:
             plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=5)
         else:
-            plt.imshow(self.final, cmap='jet', vmin=-1, vmax=3.5)
+            plt.imshow(self.final, cmap='jet', vmin=-1, vmax=14)
         plt.colorbar()
         plt.title("sp - bg")
         plt.show()
 
     def plot_hist(self):
         plt.figure()
-        plt.hist(self.final.flatten(), bins=1000)
+        plt.hist(self.final.flatten(), bins=100)
+        plt.xlim(-5, 5)
         plt.show()
 
     def write_final(self, dir_npy):
@@ -366,8 +385,9 @@ class PhaseCombo(object):
                     pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[i])
                     pr.phase_retrieval()
                     pr.plot_final(center=False)
+                    pr.plot_hist()
                     pr.plot_sp_bg()
-                    pr.plot_fdomain()
+                    # pr.plot_fdomain()
                     if save:
                         pr.write_final(output_dir)
 
@@ -378,3 +398,59 @@ class PhaseCombo(object):
             im_test = BT_image(dir_list[i])
             im_test.opennpy()
             im_test.write_image(output_dir, im_test.img * 255/(5-(-1)))
+
+
+class MatchFlourPhase(object):
+    def __init__(self, path_phasemap, path_fluor):
+        self.path_phasemap = path_phasemap
+        self.path_fluor = path_fluor
+        self.completed = None
+
+    def match(self, shift_x, shift_y):
+        im = BT_image(self.path_phasemap)
+        im.opennpy()
+        im_f = BT_image(self.path_fluor)
+        im_f.open_image()
+        im_f.img = cv2.flip(im_f.img, -1)
+
+        # two image ratio
+        m_obj = 27.778
+        m = 46.5
+        view_pixel = 5.5
+        photon_pixel = 8
+        ratio = (m / view_pixel) / (m_obj / photon_pixel)
+        new_size = int(im_f.img.shape[0] * ratio)
+        im_f.img = cv2.resize(im_f.img, (new_size, new_size), interpolation=cv2.INTER_CUBIC)
+
+        # Photonfocus crop to 3072 * 3072
+        b = im_f.img.shape[0]
+        start = b // 2 - 3072 // 2
+        end = b // 2 + 3072 // 2
+        im_f.img = im_f.img[start - shift_y: end - shift_y, start - shift_x: end - shift_x]
+
+        # subplots
+        fig, axes = plt.subplots(nrows=1, ncols=2, dpi=200, figsize=(25, 10))
+        im0 = axes[0].imshow(im.img, cmap='gray', vmax=14, vmin=-0.5)
+        axes[0].set_title("Phase image", fontsize=30)
+
+        im1 = axes[1].imshow(im_f.img, cmap=green)
+        axes[1].set_title("Fluorescent image", fontsize=30)
+
+        fig.subplots_adjust(right=1)
+        cbar_ax0 = fig.add_axes([0.47, 0.1, 0.02, 0.8])
+        cbar_ax1 = fig.add_axes([0.93, 0.1, 0.02, 0.8])
+        fig.colorbar(im0, cax=cbar_ax0)
+        cbar_ax0.set_title('rad')
+        fig.colorbar(im1, cax=cbar_ax1)
+        cbar_ax1.set_title('a.u.')
+        plt.show()
+
+        self.completed = im_f.img
+
+    def save(self, pathandname):
+        np.save(pathandname, self.completed)
+
+
+
+
+

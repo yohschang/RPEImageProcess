@@ -7,11 +7,12 @@ import tqdm
 import pandas as pd
 from sklearn.metrics import r2_score
 
-p = "E:\\DPM\\20190603\\"
+p = "E:\\DPM\\20190610\\"
 implement = PhaseCombo(p)
 # implement.combo(shift1=-1, shift2=1.2)
+
+implement.combo(target=0, save=False)
 # implement.npy2png()
-implement.combo(target=1)
 
 circel_mean = []
 
