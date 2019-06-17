@@ -7,7 +7,7 @@ import tqdm
 import pandas as pd
 from sklearn.metrics import r2_score
 
-p = "E:\\DPM\\20190610\\"
+p = "E:\\DPM\\20190614_RPE2\\"
 implement = PhaseCombo(p)
 # implement.combo(shift1=-1, shift2=1.2)
 

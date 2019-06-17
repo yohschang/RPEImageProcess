@@ -3,29 +3,110 @@ import cv2
 import numpy as np
 import tqdm
 from matplotlib import pyplot as plt
+from skimage.feature import peak_local_max
+from itertools import izip
+
+def show(image, name="set", detail=False):
+    if detail:
+        plt.figure(dpi=200, figsize=(10, 10))
+    else:
+        plt.figure()
+    plt.title(name)
+    plt.imshow(image, cmap="gray")
+    plt.colorbar()
+    plt.show()
 
 
-path = "E:\\DPM\\20190603_RPE\\phase_npy\\img_2019_06_03_17_46_38_phase.npy"
+path = "E:\\DPM\\20190614_RPE2\\phase_npy\\img_2019_06_14_19_56_33_phase.npy"
 
 im = BT_image(path)
 im.opennpy()
-# im.plot_it(im.img)
-image_rescale = (im.img + 0.5) * 255 / (3.8 + 0.5)
+plt.figure()
+plt.title("original")
+plt.imshow(im.img, cmap="gray", vmax=2, vmin=-0.5)
+plt.colorbar()
+plt.show()
+max_value = 2
+min_value = -0.5
+image_rescale = (im.img - min_value) * 255 / (max_value - min_value)
 t, image_rescale = cv2.threshold(image_rescale, 255, 255, cv2.THRESH_TRUNC)
 t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
 image = np.uint8(image_rescale)
-kernel = np.ones((8,8), np.uint8)
-image = cv2.GaussianBlur(image, (5, 5), 0)
+rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+# show(rgb)
+# plt.figure()
+# plt.hist(image_rescale.flatten(), bins= 100)
+# # plt.colorbar()
+# plt.show()
 
-result = cv2.Canny(image, 10, 100, 3)
-# result_lap = cv2.Laplacian(image, cv2.CV_64F)
-# result_lap = np.uint8(np.absolute(result_lap))
-plt.figure()
-plt.imshow(image, cmap="gray", vmax=255, vmin=0)
-plt.colorbar()
-plt.show()
+# show(image_rescale)
 
-plt.figure()
-plt.imshow(result, cmap="gray")
-plt.colorbar()
-plt.show()
+# ret, thresh = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+ret, thresh = cv2.threshold(image, 70, 255, cv2.THRESH_BINARY)
+kernel = np.ones((5, 5), np.uint8)
+thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=6)
+show(thresh, "threshold")
+
+# noise remove
+kernel = np.ones((20, 20), np.uint8)
+opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+show(opening, "opening")
+
+# fg
+kernel = np.ones((8, 8), np.uint8)
+dist_transform = cv2.distanceTransform(opening, 1, 5)
+show(dist_transform, 'dist_transform')
+ret, sure_fg = cv2.threshold(dist_transform, 0.35*dist_transform.max(), 255, 0)
+loc_max = peak_local_max(dist_transform, min_distance=2, indices=False, threshold_abs=40)
+sure_fg = np.uint8(image)
+sure_fg[loc_max == True] = 255
+sure_fg[loc_max != True] = 0
+sure_fg = cv2.dilate(sure_fg, np.ones((3, 3), np.uint8), iterations=5)
+show(sure_fg, 'sure_fg', detail=False)
+
+# sure bg
+kernel = np.ones((20, 20), np.uint8)
+sure_bg = np.uint8(cv2.dilate(opening, kernel, iterations=8))
+show(sure_bg, 'sure_bg')
+
+
+# # watershed fg: 2: bg: 1 un: 0
+# ret, markers1 = cv2.connectedComponents(sure_fg)
+# markers = np.int32(markers1)
+# markers[markers != 0] += 1
+# markers[sure_bg == 0] = 1
+# show(markers, "markers")
+# markers2 = cv2.watershed(rgb, markers)
+# show(markers2, "markers2")
+# rgb[markers2 == -1] = [255, 0, 0]
+# show(rgb)
+# rgb[markers2 == 1] = [0, 0, 0]
+# show(rgb)
+
+# rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+# result = cv2.Canny(rgb, 50, 150, 3)
+# plt.figure(dpi=200, figsize=(10, 10))
+# plt.imshow(result, cmap="gray")
+# plt.colorbar()
+# plt.show()
+
+# im.plot_it(im.img)
+# image_rescale = (im.img + 0.5) * 255 / (3.8 + 0.5)
+# t, image_rescale = cv2.threshold(image_rescale, 255, 255, cv2.THRESH_TRUNC)
+# t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
+# image = np.uint8(image_rescale)
+# kernel = np.ones((8,8), np.uint8)
+# image = cv2.GaussianBlur(image, (5, 5), 0)
+#
+# result = cv2.Canny(image, 10, 100, 3)
+# # result_lap = cv2.Laplacian(image, cv2.CV_64F)
+# # result_lap = np.uint8(np.absolute(result_lap))
+# plt.figure()
+# plt.imshow(image, cmap="gray", vmax=255, vmin=0)
+# plt.colorbar()
+# plt.show()
+#
+# plt.figure()
+# plt.imshow(result, cmap="gray")
+# plt.colorbar()
+# plt.show()

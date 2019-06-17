@@ -214,8 +214,8 @@ class PhaseRetrieval(object):
         self.bg.twodfft()
 
         # crop real or virtual image
-        self.sp.crop_first_order(-2, 0, 765)
-        self.bg.crop_first_order(0, 0, 768)
+        self.sp.crop_first_order(0, 1, 768)
+        self.bg.crop_first_order(1, 0, 770)
 
         # iFFT
         self.sp.twodifft(self.sp.crop_raw_f_domain)
@@ -265,9 +265,9 @@ class PhaseRetrieval(object):
         """beware of Memory"""
         plt.figure(dpi=200, figsize=(10, 10))
         if center:
-            plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=5)
+            plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=3.5)
         else:
-            plt.imshow(self.final, cmap='jet', vmin=-1, vmax=14)
+            plt.imshow(self.final, cmap='jet', vmin=-1, vmax=3.5)
         plt.colorbar()
         plt.title("sp - bg")
         plt.show()
@@ -397,7 +397,7 @@ class PhaseCombo(object):
         for i in tqdm.trange(len(dir_list)):
             im_test = BT_image(dir_list[i])
             im_test.opennpy()
-            im_test.write_image(output_dir, im_test.img * 255/(5-(-1)))
+            im_test.write_image(output_dir, im_test.img * 255/(3.5-(-1)))
 
 
 class MatchFlourPhase(object):
