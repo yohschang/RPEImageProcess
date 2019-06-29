@@ -58,14 +58,15 @@ jet_color = make_cmap('jet')
 
 
 class App(object):
-    def __init__(self, fn, existed_marker):
+    def __init__(self, fn, existed_marker, show_img):
         # self.img = cv2.imread(fn)
         self.img = fn
+        self.show_img = show_img
         check_img_size(self.img)
         h, w = self.img.shape[:2]
 
         self.markers = existed_marker
-        self.markers_vis = self.img.copy()
+        self.markers_vis = self.show_img.copy()
         self.cur_marker = 1
         self.colors = jet_color
         self.overlay = None

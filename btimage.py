@@ -213,9 +213,12 @@ class PhaseRetrieval(object):
         self.sp.twodfft()
         self.bg.twodfft()
 
+        # ----------------------------------------------------------------
+        x, y = self.try_the_position(self.sp)
+        print(x, y)
         # crop real or virtual image
-        self.sp.crop_first_order(0, 1, 768)
-        self.bg.crop_first_order(1, 0, 770)
+        self.sp.crop_first_order(x, y, 768)
+        self.bg.crop_first_order(0, 0, 768)
 
         # iFFT
         self.sp.twodifft(self.sp.crop_raw_f_domain)
@@ -227,12 +230,45 @@ class PhaseRetrieval(object):
         self.unwarpped_sp = unwrap_phase(self.wrapped_sp)
         self.unwarpped_bg = unwrap_phase(self.wrapped_bg)
 
+        # ----------------------------------------------------------------
+
+        # shift
+        sp_mean = np.mean(self.unwarpped_sp)
+        bg_mean = np.mean(self.unwarpped_bg)
+        self.unwarpped_sp += np.pi * self.shift(sp_mean)
+        self.unwarpped_bg += np.pi * self.shift(bg_mean)
+
         # resize
         self.final_sp = self.resize_image(self.unwarpped_sp, 3072)
         self.final_bg = self.resize_image(self.unwarpped_bg, 3072)
 
         # subtract
         self.final = self.final_sp - self.final_bg
+
+    def try_the_position(self, bt_obj):
+        min_sd = 10000
+        mini = 100
+        minj = 100
+        for i in np.arange(-4, 5, 1):
+            for j in np.arange(-4, 5, 1):
+                bt_obj.crop_first_order(i, j, 768)
+                bt_obj.twodifft(bt_obj.crop_raw_f_domain)
+                unwrap_ = unwrap_phase(bt_obj.iff)
+                buffer_sd = np.std(unwrap_)
+                if buffer_sd < min_sd:
+                    mini, minj, min_sd = i, j, buffer_sd
+        return mini, minj
+
+
+    def shift(self, sp_mean):
+        interval_list = [x - np.pi/2 for x in np.arange(-6 * np.pi, 7 * np.pi, np.pi)]
+        i = 0
+        for i, interval in enumerate(interval_list):
+            if sp_mean < interval:
+                break
+        shift_pi = 7 - i
+        # print(sp_mean, 'so', shift_pi)
+        return shift_pi
 
     def resize_image(self, image, size):
         return cv2.resize(image, (size, size), interpolation=cv2.INTER_CUBIC)
@@ -267,7 +303,7 @@ class PhaseRetrieval(object):
         if center:
             plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=3.5)
         else:
-            plt.imshow(self.final, cmap='jet', vmin=-1, vmax=3.5)
+            plt.imshow(self.final, cmap='jet', vmin=-0.5, vmax=3)
         plt.colorbar()
         plt.title("sp - bg")
         plt.show()
@@ -343,16 +379,22 @@ class PhaseCombo(object):
         check_file_exist(root_path + "BG\\", "BG dir")
         self.root = root_path
         self.pathsp_list = glob.glob(root_path + "SP\\*.bmp")
+        for i in self.pathsp_list:
+            print(i)
         self.pathbg_list = glob.glob(root_path + "BG\\*.bmp")
+
+        self.only_one_bg = True
         self.check_input()
+
 
     def check_input(self):
         if not self.pathsp_list:
             raise FileNotFoundError("no SP in this directory")
         if not self.pathbg_list:
             raise FileNotFoundError("no BG in this directory")
-        if len(self.pathsp_list) != len(self.pathbg_list):
-            raise AssertionError("SP length and BG length do not match!")
+        if not self.only_one_bg:
+            if len(self.pathsp_list) != len(self.pathbg_list):
+                raise AssertionError("SP length and BG length do not match!")
 
     def combo(self, target=-1, shift1=-1, shift2=1, save=False):
         # output
@@ -363,26 +405,27 @@ class PhaseCombo(object):
         # combo
         if target == -1:
             for i in tqdm.trange(len(self.pathsp_list)):
-                pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[i])
+                pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                 try:
                     pr.phase_retrieval()
+                    pr.plot_final(center=False)
                     if save:
                         pr.write_final(output_dir)
                 except TypeError as e:
                     print(i, "th cannot be retrieved ", e)
 
-            # shift pi
-            print("Shift pi...")
-            spp = ShiftPi(output_dir)
-            spp.check_mean()
-            spp.shift(shift1, shift2)
-            print("Finish!")
+            # # shift pi
+            # print("Shift pi...")
+            # spp = ShiftPi(output_dir)
+            # spp.check_mean()
+            # spp.shift(shift1, shift2)
+            # print("Finish!")
 
         else:
             # only for checking
             for i in tqdm.trange(len(self.pathsp_list)):
                 if i == target:
-                    pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[i])
+                    pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                     pr.phase_retrieval()
                     pr.plot_final(center=False)
                     pr.plot_hist()

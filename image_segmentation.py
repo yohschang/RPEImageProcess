@@ -27,12 +27,23 @@ plt.title("original")
 plt.imshow(im.img, cmap="gray", vmax=2, vmin=-0.5)
 plt.colorbar()
 plt.show()
+
+# plt.figure()
+# plt.hist(im.img.flatten(), bins=1000)
+# plt.title("Histogram of phase image")
+# plt.xlabel("phase (rad)")
+# plt.ylabel("number of pixel")
+# plt.xlim(-4, 4)
+# plt.show()
+
 max_value = 2
 min_value = -0.5
 image_rescale = (im.img - min_value) * 255 / (max_value - min_value)
 t, image_rescale = cv2.threshold(image_rescale, 255, 255, cv2.THRESH_TRUNC)
 t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
 image = np.uint8(image_rescale)
+
+
 image = cv2.GaussianBlur(image, (5, 5), 0)
 rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 # show(rgb)
