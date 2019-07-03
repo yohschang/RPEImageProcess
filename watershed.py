@@ -23,9 +23,52 @@ Keys
 
 import numpy as np
 import cv2
-from common import Sketcher
-from btimage import check_img_size
+# from btimage import check_img_size
 from matplotlib import pyplot as plt
+
+
+class Sketcher:
+    def __init__(self, windowname, dests, colors_func, eraser):
+        self.prev_pt = None
+        self.windowname = windowname
+        self.dests = dests
+        self.colors_func = colors_func
+        self.dirty = False
+        self.eraser = eraser
+        self.show()
+        self.mouse_track = None
+        cv2.setMouseCallback(self.windowname, self.on_mouse)
+
+    def show(self):
+        cv2.namedWindow(self.windowname, cv2.WINDOW_NORMAL)
+        cv2.imshow(self.windowname, self.dests[0])
+        cv2.resizeWindow(self.windowname, 640, 640)
+
+    def on_mouse(self, event, x, y, flags, param):
+        pt = (x, y)
+
+        # the track of mouse
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.prev_pt = pt
+
+        if event == cv2.EVENT_RBUTTONDOWN:
+            print("right click")
+            cv2.namedWindow(self.windowname, cv2.WINDOW_NORMAL)
+            cv2.imshow(self.windowname, self.raw)
+            cv2.resizeWindow(self.windowname, 640, 640)
+
+        # draw a line
+        if self.prev_pt and flags & cv2.EVENT_FLAG_LBUTTON:
+            # print(self.colors_func())
+            for dst, color in zip(self.dests, self.colors_func()):
+                cv2.line(dst, self.prev_pt, pt, color, self.eraser)
+            self.dirty = True
+            self.prev_pt = pt
+            self.mouse_track = pt
+            self.show()
+        else:
+            self.prev_pt = None
+            self.mouse_track = pt
 
 
 def make_cmap(name, n=256):
@@ -62,7 +105,6 @@ class App(object):
         # self.img = cv2.imread(fn)
         self.img = fn
         self.show_img = show_img
-        check_img_size(self.img)
         h, w = self.img.shape[:2]
 
         self.markers = existed_marker

@@ -1,14 +1,11 @@
-from btimage import BT_image
+from btimage import BT_image, CellLabelOneImage
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
 import tqdm
-from skimage.feature import peak_local_max
-from skimage.morphology import disk
-from skimage.filters.rank import enhance_contrast
-from skimage.exposure import adjust_sigmoid
 from skimage.transform import rescale
 import watershed
+
 
 
 def show(image, name="set", detail=False, colorbar=True):
@@ -65,101 +62,105 @@ def adaptive_threshold(image):
 
 path = "E:\\DPM\\20190614_RPE2\\phase_npy\\img_2019_06_14_19_56_33_phase.npy"
 
-im = BT_image(path)
-im.opennpy()
 
-gray = phase2uint8(im.img)
-show(gray, "gray")
-
-# image smoothing
-gray = cv2.GaussianBlur(gray, (7, 7), sigmaX=1)
-show(gray, "gaussian filter")
-
-# # image sharpening --- Sigmoid Correction
-image_contrast = np.uint8(gray.copy())
-image_contrast = enhance_contrast(image_contrast, disk(5))
-show(image_contrast, "image_contrast")
-show_hist(image_contrast, 200, "before")
-img1 = adjust_sigmoid(image_contrast, cutoff=0.08, gain=18)
-show(img1, "Sigmoid Correction")
-show_hist(img1, 200, "after")
-
-
-gain = 18
-cutoff = 0.08
-x = np.arange(0, 1, 0.01)
-y = 1/(1 + np.exp((gain*(cutoff - x))))
+after = CellLabelOneImage(path).run()
 plt.figure()
-plt.title("Sigmoid Correction (cutoff: 0.08, gain: 18)")
-plt.plot(x, y)
+plt.imshow(after, cmap='jet')
 plt.show()
 
 
-# manually thresholding
-image_binary = img1.copy()
-image_binary, th = adaptive_threshold(image_binary)
-show(image_binary, "image_binary")
+# im = BT_image(path)
+# im.opennpy()
+#
+# gray = phase2uint8(im.img)
+# show(gray, "gray")
+#
+# # image smoothing
+# gray = cv2.GaussianBlur(gray, (7, 7), sigmaX=1)
+# show(gray, "gaussian filter")
+#
+# # # image sharpening --- Sigmoid Correction
+# image_contrast = np.uint8(gray.copy())
+# image_contrast = enhance_contrast(image_contrast, disk(5))
+# show(image_contrast, "image_contrast")
+# show_hist(image_contrast, 200, "before")
+# img1 = adjust_sigmoid(image_contrast, cutoff=0.08, gain=18)
+# show(img1, "Sigmoid Correction")
+# show_hist(img1, 200, "after")
+#
+#
+# gain = 18
+# cutoff = 0.08
+# x = np.arange(0, 1, 0.01)
+# y = 1/(1 + np.exp((gain*(cutoff - x))))
+# plt.figure()
+# plt.title("Sigmoid Correction (cutoff: 0.08, gain: 18)")
+# plt.plot(x, y)
+# plt.show()
+#
+#
+# # manually thresholding
+# image_binary = img1.copy()
+# image_binary, th = adaptive_threshold(image_binary)
+# show(image_binary, "image_binary")
+#
+# kernel = np.ones((3, 3), np.uint8)
+# image_binary = cv2.morphologyEx(image_binary, cv2.MORPH_CLOSE, kernel, iterations=4)
+# kernel = np.ones((30, 30), np.uint8)
+# image_binary = cv2.morphologyEx(image_binary, cv2.MORPH_OPEN, kernel, iterations=1)
+# show(image_binary, "image_binary_morphological_oper")
 
-kernel = np.ones((3, 3), np.uint8)
-image_binary = cv2.morphologyEx(image_binary, cv2.MORPH_CLOSE, kernel, iterations=4)
-kernel = np.ones((30, 30), np.uint8)
-image_binary = cv2.morphologyEx(image_binary, cv2.MORPH_OPEN, kernel, iterations=1)
-show(image_binary, "image_binary_morphological_oper")
+# # sure bg
+# sure_bg = image_binary.copy()
+# kernel = np.ones((5, 5), np.uint8)
+# sure_bg = np.uint8(cv2.dilate(sure_bg, kernel, iterations=8))
+# show(sure_bg, "sure_bg")
 
-# sure bg
-sure_bg = image_binary.copy()
-kernel = np.ones((5, 5), np.uint8)
-sure_bg = cv2.morphologyEx(sure_bg, cv2.MORPH_CLOSE, kernel, iterations=6)
-sure_bg = cv2.morphologyEx(sure_bg, cv2.MORPH_OPEN, kernel, iterations=7)
-sure_bg = np.uint8(cv2.dilate(sure_bg, kernel, iterations=8))
-show(sure_bg, "sure_bg")
+# # distance transform
+# dist_transform = cv2.distanceTransform(np.uint8(image_binary), 1, 5)
+# show(dist_transform, 'dist_transform')
+# dist_binary = dist_transform.copy()
+# dist_binary[dist_binary < 20] = 0
+# show(dist_binary, "dist_binary")
 
-# distance transform
-dist_transform = cv2.distanceTransform(np.uint8(image_binary), 1, 5)
-show(dist_transform, 'dist_transform')
-dist_binary = dist_transform.copy()
-dist_binary[dist_binary < 20] = 0
-show(dist_binary, "dist_binary")
+# # rgb img
+# rgb = cv2.cvtColor(np.uint8(dist_binary), cv2.COLOR_GRAY2BGR)
 
-# rgb img
-rgb = cv2.cvtColor(np.uint8(dist_binary), cv2.COLOR_GRAY2BGR)
+# # find local maximum
+# marker = np.zeros((3072, 3072), np.uint8)
+# local_maxi = peak_local_max(dist_binary, indices=False, footprint=np.ones((220, 220)))
+# marker[local_maxi == True] = 255
+# kernel = np.ones((5, 5), np.uint8)
+# marker = np.uint8(cv2.dilate(marker, kernel, iterations=8))
 
+# # label local maximum
+# ret, markers1 = cv2.connectedComponents(marker)
+# markers1[sure_bg == 0] = 1
+# markers1 = np.int32(markers1)
 
-# find local maximum
-marker = np.zeros((3072, 3072), np.uint8)
-local_maxi = peak_local_max(dist_binary, indices=False, footprint=np.ones((220, 220)))
-marker[local_maxi == True] = 255
-kernel = np.ones((5, 5), np.uint8)
-marker = np.uint8(cv2.dilate(marker, kernel, iterations=8))
+# plt.figure()
+# plt.title("markers1")
+# plt.imshow(markers1, cmap='jet')
+# plt.colorbar()
+# plt.show()
+#
+# # watershed
+# pre_markers = markers1.copy()
+# after_water = cv2.watershed(rgb, markers1)
+#
+# plt.figure()
+# plt.title("after_water")
+# plt.imshow(after_water, cmap='jet')
+# plt.colorbar()
+# plt.show()
 
-# label local maximum
-ret, markers1 = cv2.connectedComponents(marker)
-markers1[sure_bg == 0] = 1
-markers1 = np.int32(markers1)
-
-plt.figure()
-plt.title("markers1")
-plt.imshow(markers1, cmap='jet')
-plt.colorbar()
-plt.show()
-
-# watershed
-pre_markers = markers1.copy()
-after_water = cv2.watershed(rgb, markers1)
-
-plt.figure()
-plt.title("after_water")
-plt.imshow(after_water, cmap='jet')
-plt.colorbar()
-plt.show()
-
-# overlay
-gray = np.uint8(gray)
-after_water = np.uint8(after_water)
-plt.figure(figsize=(10, 10))
-plt.imshow(after_water, cmap='jet', alpha=0.5, vmax=45, vmin=0)
-plt.imshow(gray, cmap='gray', alpha=0.5)
-plt.show()
+# # overlay
+# gray = np.uint8(gray)
+# after_water = np.uint8(after_water)
+# plt.figure(figsize=(10, 10))
+# plt.imshow(after_water, cmap='jet', alpha=0.5, vmax=45, vmin=0)
+# plt.imshow(gray, cmap='gray', alpha=0.5)
+# plt.show()
 
 
 # # maunally adjust
