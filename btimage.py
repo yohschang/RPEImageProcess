@@ -25,7 +25,6 @@ from skimage.feature import peak_local_max
 from skimage.morphology import disk
 from skimage.filters.rank import enhance_contrast
 from skimage.exposure import adjust_sigmoid
-import watershed
 from random import randint
 import glob
 import tqdm
@@ -44,6 +43,34 @@ cdict1 = {'red': ((0.0, 0.0, 0.0),
                    (1.0, 0.5, 0.5))
           }
 green = LinearSegmentedColormap('green', cdict1)
+
+_jet_data ={'red':   ((0., 0, 0), (0.35, 0, 0), (0.66, 1, 1), (0.89,1, 1),
+                     (1, 0.5, 0.5)),
+            'green': ((0., 0, 0), (0.125,0, 0), (0.375,1, 1), (0.64,1, 1),
+                     (0.91,0,0), (1, 0, 0)),
+            'blue':  ((0., 0.5, 0.5), (0.11, 1, 1), (0.34, 1, 1), (0.65,0, 0),
+                     (1, 0, 0))}
+
+cmap_data = {'jet': _jet_data}
+
+
+def make_cmap(name, n=256):
+    data = cmap_data[name]
+    xs = np.linspace(0.0, 1.0, n)
+    channels = []
+    eps = 1e-6
+    for ch_name in ['blue', 'green', 'red']:
+        ch_data = data[ch_name]
+        xp, yp = [], []
+        for x, y1, y2 in ch_data:
+            xp += [x, x+eps]
+            yp += [y1, y2]
+        ch = np.interp(xs, xp, yp)
+        channels.append(ch)
+    return np.uint8(np.array(channels).T*255)
+
+
+jet_color = make_cmap('jet')
 
 
 def round_all_the_entries_ndarray(matrix, decimal):
@@ -533,32 +560,48 @@ class MatchFlourPhase(object):
 
 
 class CellLabelOneImage(object):
-    def __init__(self, path):
+    """Instance recognition"""
+
+    def __init__(self, path, save_path, current_image_num):
         im = BT_image(path)
         im.opennpy()
         self.img = im.img
         check_img_size(self.img)
+        self.save_path = save_path
+        check_file_exist(self.save_path, "save path")
+
+        self.current_image_num = current_image_num
         self.img_origin = None
         self.sure_bg = None
         self.sure_fg = None
         self.pre_marker = None
         self.distance_img = None
         self.after_water = None
+        self.plot_mode = False
 
-    def run(self, adjust=False):
+    def run(self, adjust=False, plot_mode=False):
+        self.plot_mode = plot_mode
         self.phase2uint8()
         self.smoothing()
-        self.sharpening()
+        self.sharpening(0.15, 30)
         self.adaptive_threshold()
         self.morphology_operator()
         self.prepare_bg()
         self.distance_trans()
         self.find_local_max()
         self.watershed_algorithm()
+
         if adjust:
             self.watershed_manually()
 
         return self.after_water
+
+    def plot_gray(self, image, title_str):
+        plt.figure()
+        plt.title(title_str)
+        plt.imshow(image, cmap="gray")
+        plt.colorbar()
+        plt.show()
 
     def phase2uint8(self):
         self.img[self.img >= 4] = 0
@@ -569,27 +612,31 @@ class CellLabelOneImage(object):
         t, image_rescale = cv2.threshold(image_rescale, 255, 255, cv2.THRESH_TRUNC)
         t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
         self.img = np.uint8(np.round(image_rescale))
-        # show
+        if self.plot_mode:
+            self.plot_gray(self.img, "original image")
         return self.img
 
     def smoothing(self):
         self.img = cv2.GaussianBlur(self.img, (7, 7), sigmaX=1)
         # show
 
-    def sharpening(self):
+    def sharpening(self, cutoff_value, gain_value):
+        if self.plot_mode:
+            plt.figure()
+            plt.hist(self.img.flatten(), bins=200)
+            plt.show()
         # self.img = enhance_contrast(self.img, disk(5))
-        self.img = adjust_sigmoid(self.img, cutoff=0.08, gain=18)
+        self.img = adjust_sigmoid(self.img, cutoff=cutoff_value, gain=gain_value)
         self.img_origin = self.img.copy()
         # show
 
-        # gain = 18
-        # cutoff = 0.08
-        # x = np.arange(0, 1, 0.01)
-        # y = 1/(1 + np.exp((gain*(cutoff - x))))
-        # plt.figure()
-        # plt.title("Sigmoid Correction (cutoff: 0.08, gain: 18)")
-        # plt.plot(x, y)
-        # plt.show()
+        x = np.arange(0, 1, 0.01)
+        y = 1/(1 + np.exp((gain_value*(cutoff_value - x))))
+        if self.plot_mode:
+            plt.figure()
+            plt.title("Sigmoid Correction (cutoff: 0.08, gain: 18)")
+            plt.plot(x, y)
+            plt.show()
 
     def adaptive_threshold(self):
         array_image = self.img.flatten()
@@ -601,20 +648,27 @@ class CellLabelOneImage(object):
         # plt.show()
 
         # Adaptive threshold
-        n = n[4:]
-        bin_max = np.where(n == n.max())[0][0]
+        b = b[:-1]
+        n[b < 70] = 0
+        n[b > 220] = 0
+        bin_max = np.argmax(n)
         print("bin_max", bin_max)
         max_value = b[bin_max]
-        threshold = 0.7 * np.sum(array_image) / len(array_image[array_image > max_value])
+        print(max_value)
+        threshold = 0.5 * np.sum(array_image) / len(array_image[array_image > max_value])
         print("Adaptive threshold is:", threshold)
         # thresholding
-        ret, self.img = cv2.threshold(self.img, 155, 255, cv2.THRESH_BINARY)
+        ret, self.img = cv2.threshold(self.img, threshold, 255, cv2.THRESH_BINARY)
+        if self.plot_mode:
+            self.plot_gray(self.img, "binary image")
 
     def morphology_operator(self):
         kernel = np.ones((3, 3), np.uint8)
         self.img = cv2.morphologyEx(self.img, cv2.MORPH_CLOSE, kernel, iterations=4)
         kernel = np.ones((30, 30), np.uint8)
         self.img = cv2.morphologyEx(self.img, cv2.MORPH_OPEN, kernel, iterations=1)
+        if self.plot_mode:
+            self.plot_gray(self.img, "morphology image")
 
     def prepare_bg(self):
         self.sure_bg = self.img.copy()
@@ -623,16 +677,22 @@ class CellLabelOneImage(object):
 
     def distance_trans(self):
         self.img = cv2.distanceTransform(self.img, 1, 5)
+
+        # remove too small region
         self.img[self.img < 20] = 0
+
         self.distance_img = self.img.copy()
-        # show
+        if self.plot_mode:
+            self.plot_gray(self.img, "dist image")
 
     def find_local_max(self):
         marker = np.zeros((3072, 3072), np.uint8)
+
+        # 220 is the size of RPE
         local_maxi = peak_local_max(self.img, indices=False, footprint=np.ones((220, 220)))
         marker[local_maxi == True] = 255
         kernel = np.ones((5, 5), np.uint8)
-        marker = np.uint8(cv2.dilate(marker, kernel, iterations=5))
+        marker = np.uint8(cv2.dilate(marker, kernel, iterations=8))
 
         ret, markers1 = cv2.connectedComponents(marker)
         markers1[self.sure_bg == 0] = 1
@@ -642,14 +702,188 @@ class CellLabelOneImage(object):
         rgb = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
         self.after_water = self.pre_marker.copy()
         cv2.watershed(rgb, self.after_water)
+        if self.plot_mode:
+            self.plot_gray(self.after_water, "watershed image")
 
     def watershed_manually(self):
+        """Implement App"""
         self.img_origin = cv2.cvtColor(self.img_origin, cv2.COLOR_GRAY2BGR)
         self.distance_img = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
-        print(watershed.__doc__)
-        r = watershed.App(self.distance_img, self.pre_marker, self.img_origin)
+        print(App.__doc__)
+        r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.save_path, cur_img_num=self.current_image_num)
         r.run()
 
+
+class Sketcher:
+    def __init__(self, windowname, dests, colors_func, eraser):
+        self.prev_pt = None
+        self.windowname = windowname
+        self.dests = dests
+        self.colors_func = colors_func
+        self.dirty = False
+        self.eraser = eraser
+        self.show()
+        self.mouse_track = None
+        cv2.setMouseCallback(self.windowname, self.on_mouse)
+
+    def show(self):
+        cv2.namedWindow(self.windowname, cv2.WINDOW_NORMAL)
+        cv2.imshow(self.windowname, self.dests[0])
+        cv2.resizeWindow(self.windowname, 640, 640)
+
+    def on_mouse(self, event, x, y, flags, param):
+        pt = (x, y)
+
+        # the track of mouse
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.prev_pt = pt
+
+        if event == cv2.EVENT_RBUTTONDOWN:
+            print("right click")
+            cv2.namedWindow(self.windowname, cv2.WINDOW_NORMAL)
+            cv2.imshow(self.windowname, self.raw)
+            cv2.resizeWindow(self.windowname, 640, 640)
+
+        # draw a line
+        if self.prev_pt and flags & cv2.EVENT_FLAG_LBUTTON:
+            # print(self.colors_func())
+            for dst, color in zip(self.dests, self.colors_func()):
+                cv2.line(dst, self.prev_pt, pt, color, self.eraser)
+            self.dirty = True
+            self.prev_pt = pt
+            self.mouse_track = pt
+            self.show()
+        else:
+            self.prev_pt = None
+            self.mouse_track = pt
+
+
+class App(object):
+    """
+            Watershed segmentation
+            =========
+
+            This program demonstrates the watershed segmentation algorithm
+            in OpenCV: watershed().
+
+            Usage
+            -----
+            watershed.py [image filename]
+
+            Keys
+            ----
+              1-7   - switch marker color
+              SPACE - update segmentation
+              r     - reset
+              a     - toggle autoupdate
+              ESC   - exit
+
+        """
+    def __init__(self, fn, existed_marker, show_img, save_path, cur_img_num):
+        self.img = fn
+        self.show_img = show_img
+        h, w = self.img.shape[:2]
+        self.cur_img_num = cur_img_num
+        self.markers = existed_marker
+        self.markers_vis = self.show_img.copy()
+        self.cur_marker = 1
+        self.colors = jet_color
+        self.overlay = None
+        self.m = None
+
+        # marker pen diameter
+        self.eraser = 20
+        self.auto_update = False
+        self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.get_colors, self.eraser)
+
+        self.save_path = save_path
+
+    def get_colors(self):
+        # print(list(map(int, self.colors[self.cur_marker])))
+        return list(map(int, self.colors[self.cur_marker*3])), int(self.cur_marker)
+
+    def watershed(self):
+
+        # because watershed will change m
+        self.m = self.markers.copy()
+
+        # watershed algorithm
+        cv2.watershed(self.img, self.m)
+
+        # transfer marker to color but remove negative marker
+        self.overlay = self.colors[np.maximum(self.m, 0)*3]
+
+        vis = cv2.addWeighted(self.img, 0.5, self.overlay, 0.5, 0.0, dtype=cv2.CV_8UC3)
+        cv2.namedWindow('watershed', cv2.WINDOW_NORMAL)
+        cv2.imshow('watershed', vis)
+        cv2.resizeWindow("watershed", 640, 640)
+        plt.close()
+        plt.figure()
+        plt.imshow(self.markers, cmap='jet')
+        plt.show()
+
+    def run(self):
+
+        # init marker
+        decision = 1
+        while True:
+            ch = 0xFF & cv2.waitKey(50)
+
+            # Esc
+            if ch == 27:
+                break
+
+            if ch >= ord('1') and ch <= ord('7'):
+                self.cur_marker = ch - ord('0')
+                print('marker: ', self.cur_marker)
+
+            if ch == ord("0"):
+                self.cur_marker = 0
+                print('marker: ', self.cur_marker)
+
+            if ch in [ord('q'), ord('Q')]:
+                self.eraser += 1
+                print("dot: ", self.eraser)
+            if ch in [ord('w'), ord('W')]:
+                self.eraser -= 1
+                print("dot: ", self.eraser)
+
+            if ch in [ord('l'), ord('L')]:
+                self.cur_marker = self.cur_marker + 1
+                print('marker: ', self.cur_marker)
+
+            if ch in [ord('t'), ord('T')]:
+                self.markers[self.markers == self.cur_marker] = 0
+                print('reset: ', self.cur_marker, " in the image")
+
+            # update watershed
+            if ch == ord(' ') or (self.sketch.dirty and self.auto_update):
+                self.watershed()
+                self.sketch.dirty = False
+
+            # automatic update
+            if ch in [ord('a'), ord('A')]:
+                self.auto_update = not self.auto_update
+                print('auto_update if', ['off', 'on'][self.auto_update])
+
+            # reset
+            if ch in [ord('r'), ord('R')]:
+                # self.markers[:] = 0
+                self.markers_vis[:] = self.show_img
+                self.sketch.show()
+
+            # save
+            if ch in [ord('s'), ord('S')]:
+                self.watershed()
+                np.save(self.save_path + str(self.cur_img_num) + "_marker.npy", self.markers)
+                print("save marker to ", self.save_path + str(self.cur_img_num) + "_marker.npy")
+
+            # catch the marker
+            if ch in [ord('c'), ord('C')]:
+                print("track the mouse:", self.sketch.mouse_track)
+                self.cur_marker = self.markers[self.sketch.mouse_track[1], self.sketch.mouse_track[0]]
+                print("marker:", self.cur_marker)
+        cv2.destroyAllWindows()
 
 
 

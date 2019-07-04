@@ -27,43 +27,10 @@ def show_hist(image, bin, img_title):
     plt.show()
 
 
-def phase2uint8(image):
-    image[image >= 4] = 0
-    image[image <= -0.5] = -0.5
-    max_value = image.max()
-    min_value = image.min()
-    image_rescale = (image - min_value) * 255 / (max_value - min_value)
-    t, image_rescale = cv2.threshold(image_rescale, 255, 255, cv2.THRESH_TRUNC)
-    t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
-    image = np.uint8(np.round(image_rescale))
-    return image
-
-
-def adaptive_threshold(image):
-    array_image = image.flatten()
-    # plt.figure()
-    n, b, patches = plt.hist(array_image, bins=200)
-    # plt.title("Histogram of phase image")
-    # plt.xlabel("gray value")
-    # plt.ylabel("number of pixel")
-    # plt.show()
-
-    # Adaptive threshold
-    n = n[4:]
-    bin_max = np.where(n == n.max())[0][0]
-    print("bin_max", bin_max)
-    max_value = b[bin_max]
-    threshold = 0.7 * np.sum(array_image) / len(array_image[array_image > max_value])
-    print("Adaptive threshold is:", threshold)
-    # thresholding
-    ret, thresh_img = cv2.threshold(image, threshold, 255, cv2.THRESH_BINARY)
-    return thresh_img, threshold
-
-
 path = "E:\\DPM\\20190614_RPE2\\phase_npy\\img_2019_06_14_19_56_33_phase.npy"
 
 
-after = CellLabelOneImage(path).run()
+after = CellLabelOneImage(path).run(adjust=True)
 plt.figure()
 plt.imshow(after, cmap='jet')
 plt.show()

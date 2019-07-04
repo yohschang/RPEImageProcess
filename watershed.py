@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-'''
+"""
 Watershed segmentation
 =========
 
@@ -19,13 +19,13 @@ Keys
   a     - toggle autoupdate
   ESC   - exit
 
-'''
+"""
 
 import numpy as np
 import cv2
 # from btimage import check_img_size
 from matplotlib import pyplot as plt
-
+import time
 
 class Sketcher:
     def __init__(self, windowname, dests, colors_func, eraser):
@@ -101,12 +101,11 @@ jet_color = make_cmap('jet')
 
 
 class App(object):
-    def __init__(self, fn, existed_marker, show_img):
-        # self.img = cv2.imread(fn)
+    def __init__(self, fn, existed_marker, show_img, save_path, cur_img_num):
         self.img = fn
         self.show_img = show_img
         h, w = self.img.shape[:2]
-
+        self.cur_img_num = cur_img_num
         self.markers = existed_marker
         self.markers_vis = self.show_img.copy()
         self.cur_marker = 1
@@ -119,9 +118,11 @@ class App(object):
         self.auto_update = False
         self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.get_colors, self.eraser)
 
+        self.save_path = save_path
+
     def get_colors(self):
         # print(list(map(int, self.colors[self.cur_marker])))
-        return list(map(int, self.colors[self.cur_marker*2])), int(self.cur_marker)
+        return list(map(int, self.colors[self.cur_marker*3])), int(self.cur_marker)
 
     def watershed(self):
 
@@ -132,12 +133,13 @@ class App(object):
         cv2.watershed(self.img, self.m)
 
         # transfer marker to color but remove negative marker
-        self.overlay = self.colors[np.maximum(self.m, 0)*2]
+        self.overlay = self.colors[np.maximum(self.m, 0)*3]
 
         vis = cv2.addWeighted(self.img, 0.5, self.overlay, 0.5, 0.0, dtype=cv2.CV_8UC3)
         cv2.namedWindow('watershed', cv2.WINDOW_NORMAL)
         cv2.imshow('watershed', vis)
         cv2.resizeWindow("watershed", 640, 640)
+        plt.close()
         plt.figure()
         plt.imshow(self.markers, cmap='jet')
         plt.show()
@@ -153,11 +155,6 @@ class App(object):
             if ch == 27:
                 break
 
-            # # current marker
-            # if ch in [ord('o'), ord('O')]:
-            #     decision = input("Please decide a marker:")
-            #     self.cur_marker = decision
-            #     print('marker: ', self.cur_marker)
             if ch >= ord('1') and ch <= ord('7'):
                 self.cur_marker = ch - ord('0')
                 print('marker: ', self.cur_marker)
@@ -194,13 +191,14 @@ class App(object):
             # reset
             if ch in [ord('r'), ord('R')]:
                 # self.markers[:] = 0
-                self.markers_vis[:] = self.img
+                self.markers_vis[:] = self.show_img
                 self.sketch.show()
 
             # save
             if ch in [ord('s'), ord('S')]:
                 self.watershed()
-                np.save("E:\\DPM\\20190614_RPE2\\marker.npy", self.markers)
+                np.save(self.save_path + str(self.cur_img_num) + "_marker.npy", self.markers)
+                print("save marker to ", self.save_path + str(self.cur_img_num) + "_marker.npy")
 
             # catch the marker
             if ch in [ord('c'), ord('C')]:
@@ -210,15 +208,15 @@ class App(object):
         cv2.destroyAllWindows()
 
 
-if __name__ == '__main__':
-    import sys
-    try:
-        fn = sys.argv[1]
-    except:
-        fn = 'C:\\Users\\BT\\PycharmProjects\\untitled1\\img_2019_06_14_18_12_10_phase.png'
-    print(__doc__)
-    pre_markers = np.zeros((3072, 3072), np.int32)
-    App(fn, pre_markers).run()
+# if __name__ == '__main__':
+#     import sys
+#     try:
+#         fn = sys.argv[1]
+#     except:
+#         fn = 'C:\\Users\\BT\\PycharmProjects\\untitled1\\img_2019_06_14_18_12_10_phase.png'
+#     print(__doc__)
+#     pre_markers = np.zeros((3072, 3072), np.int32)
+#     App(fn, pre_markers).run()
 
 
 
