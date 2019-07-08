@@ -18,7 +18,7 @@ path = "E:\\DPM\\20190701\\1\\SP\\time-lapse\\"
 # t.combo(target=24, m_factor=0.3, save=True)
 
 path_modify = 'E:\\DPM\\20190701\\1\\SP\\time-lapse\\phase_npy_finish\\'
-for i in range(4, 5):
+for i in range(6, 7):
     path = path_modify + str(i+1) + "_phase.npy"
     print(path)
     im = BT_image(path)
@@ -30,7 +30,10 @@ for i in range(4, 5):
     # plt.savefig(path_modify + "pic\\" + str(i+1) + ".tif", format="png")
     plt.show()
 
-    after = CellLabelOneImage(path, path_modify + "pic//", i+1).run(adjust=True, plot_mode=False)
+    # labeling
+    marker_file = "E:\\DPM\\20190701\\1\\SP\\time-lapse\\phase_npy_finish\\pic\\7_marker.npy"
+    after = CellLabelOneImage(path, path_modify + "pic\\", i+1).run(adjust=True, plot_mode=False, marker_file=marker_file)
+
     plt.close()
     plt.figure()
     plt.title(str(i+1)+"label img")

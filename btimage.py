@@ -1,4 +1,8 @@
 """
+Purpose: BT thesis
+author: BT
+Date: 20190703
+
 class:
     BT_image
     PhaseRetrieval
@@ -6,13 +10,14 @@ class:
     TimeLapseCombo
     MatchFlourPhase
     CellLabelOneImage
+    App
+    Sketcher
 
 function:
     check_file_exist
     check_img_size
 
 """
-
 
 import cv2
 from os import path, makedirs
@@ -435,7 +440,7 @@ class PhaseCombo(object):
                     pr.plot_final(center=False)
                     pr.plot_hist()
                     pr.plot_sp_bg()
-                    # pr.plot_fdomain()
+                    pr.plot_fdomain()
                     if save:
                         pr.write_final(output_dir)
 
@@ -457,15 +462,20 @@ class TimeLapseCombo(object):
 
     def read(self, start, end):
         for i in range(start, end+1):
+            found_bg = glob.glob(self.root_path + "*.bmp")
+            if len(found_bg) < 1:
+                raise FileExistsError("BG lost")
+            print("BG:", found_bg[0])
+            self.pathbg_list.append(found_bg[0])
+
             path_cur = self.root_path + str(i) + "\\"
             check_file_exist(path_cur, "i")
             found_file = glob.glob(path_cur + "*.bmp")
-            if len(found_file) != 2:
-                raise FileExistsError("SP or BG lost")
+            if len(found_file) != 1:
+                raise FileExistsError("SP lost or too many SP")
             print("SP:", found_file[0])
-            print("BG:", found_file[1])
             self.pathsp_list.append(found_file[0])
-            self.pathbg_list.append(found_file[1])
+
 
     def combo(self, target=-1, save=False, m_factor=0):
         # create output file
@@ -476,12 +486,12 @@ class TimeLapseCombo(object):
         # combo
         if target == -1:
             for i in tqdm.trange(len(self.pathsp_list)):
-                pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[6])
+                pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                 try:
-                    pr.phase_retrieval(m_factor, bg=(-1, -5))
+                    pr.phase_retrieval(m_factor, bg=(0, 2))
                     print(np.std(pr.final))
                     if np.std(pr.final) > 1.2:
-                        pr.phase_retrieval(m_factor, bg=(-1, -4))
+                        pr.phase_retrieval(m_factor, bg=(0, 2))
                     pr.plot_final(center=False)
                     # pr.plot_hist()
                     if save:
@@ -494,10 +504,10 @@ class TimeLapseCombo(object):
             # only for checking
             for i in tqdm.trange(len(self.pathsp_list)):
                 if i == target:
-                    pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[6])
-                    pr.phase_retrieval(m_factor, bg=(-1, -5))
+                    pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
+                    pr.phase_retrieval(m_factor, bg=(0, 2))
                     if np.std(pr.final) > 1:
-                        pr.phase_retrieval(m_factor, bg=(-1, -5))
+                        pr.phase_retrieval(m_factor, bg=(0, 2))
                     pr.plot_final(center=False)
                     pr.plot_hist()
                     pr.plot_sp_bg()
@@ -579,7 +589,7 @@ class CellLabelOneImage(object):
         self.after_water = None
         self.plot_mode = False
 
-    def run(self, adjust=False, plot_mode=False):
+    def run(self, adjust=False, plot_mode=False, marker_file=None):
         self.plot_mode = plot_mode
         self.phase2uint8()
         self.smoothing()
@@ -592,7 +602,7 @@ class CellLabelOneImage(object):
         self.watershed_algorithm()
 
         if adjust:
-            self.watershed_manually()
+            self.watershed_manually(marker_file)
 
         return self.after_water
 
@@ -658,7 +668,8 @@ class CellLabelOneImage(object):
         threshold = 0.5 * np.sum(array_image) / len(array_image[array_image > max_value])
         print("Adaptive threshold is:", threshold)
         # thresholding
-        ret, self.img = cv2.threshold(self.img, threshold, 255, cv2.THRESH_BINARY)
+        self.img = cv2.adaptiveThreshold(self.img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 501, 1)
+        # ret, self.img = cv2.threshold(self.img, threshold, 255, cv2.THRESH_BINARY)
         if self.plot_mode:
             self.plot_gray(self.img, "binary image")
 
@@ -672,24 +683,41 @@ class CellLabelOneImage(object):
 
     def prepare_bg(self):
         self.sure_bg = self.img.copy()
-        kernel = np.ones((5, 5), np.uint8)
-        self.sure_bg = np.uint8(cv2.dilate(self.sure_bg, kernel, iterations=8))
+        # kernel = np.ones((5, 5), np.uint8)
+        # self.sure_bg = np.uint8(cv2.dilate(self.sure_bg, kernel, iterations=5))
 
     def distance_trans(self):
-        self.img = cv2.distanceTransform(self.img, 1, 5)
-
+        """
+                    force watershed algorithm flow to the value distance = 0 but not sure bg,
+                    so distance map += 1
+                    distance map where the location is sure bg -= 1
+                """
+        self.img = cv2.distanceTransform(self.img, 1, 5) + 1
+        self.img[self.sure_bg == 0] -= 1
+        # plt.figure()
+        # plt.hist(self.img.flatten(), bins=100)
+        # plt.show()
+        # self.img = np.power(self.img/float(np.max(self.img)), 0.6) * 255
         # remove too small region
-        self.img[self.img < 20] = 0
+        # self.img[self.img < 50] = 0
 
         self.distance_img = self.img.copy()
         if self.plot_mode:
-            self.plot_gray(self.img, "dist image")
+            # self.plot_gray(self.img, "dist image")
+            plt.figure()
+            plt.imshow(self.img, cmap='jet')
+            plt.colorbar()
+            plt.show()
+
+            plt.figure()
+            plt.hist(self.img.flatten(), bins=100)
+            plt.show()
 
     def find_local_max(self):
         marker = np.zeros((3072, 3072), np.uint8)
 
         # 220 is the size of RPE
-        local_maxi = peak_local_max(self.img, indices=False, footprint=np.ones((220, 220)))
+        local_maxi = peak_local_max(self.img, indices=False, footprint=np.ones((220, 220)), threshold_abs=20)
         marker[local_maxi == True] = 255
         kernel = np.ones((5, 5), np.uint8)
         marker = np.uint8(cv2.dilate(marker, kernel, iterations=8))
@@ -697,6 +725,8 @@ class CellLabelOneImage(object):
         ret, markers1 = cv2.connectedComponents(marker)
         markers1[self.sure_bg == 0] = 1
         self.pre_marker = np.int32(markers1)
+        if self.plot_mode:
+            self.plot_gray(self.pre_marker, "local max image")
 
     def watershed_algorithm(self):
         rgb = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
@@ -705,13 +735,21 @@ class CellLabelOneImage(object):
         if self.plot_mode:
             self.plot_gray(self.after_water, "watershed image")
 
-    def watershed_manually(self):
+    def watershed_manually(self, marker_file=None):
         """Implement App"""
         self.img_origin = cv2.cvtColor(self.img_origin, cv2.COLOR_GRAY2BGR)
         self.distance_img = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
         print(App.__doc__)
+
+        if marker_file:
+            try:
+                self.pre_marker = np.load(marker_file)
+            except:
+                raise FileExistsError("cannot open marker file")
+
         r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.save_path, cur_img_num=self.current_image_num)
         r.run()
+        self.after_water = r.m
 
 
 class Sketcher:
@@ -738,11 +776,11 @@ class Sketcher:
         if event == cv2.EVENT_LBUTTONDOWN:
             self.prev_pt = pt
 
-        if event == cv2.EVENT_RBUTTONDOWN:
-            print("right click")
-            cv2.namedWindow(self.windowname, cv2.WINDOW_NORMAL)
-            cv2.imshow(self.windowname, self.raw)
-            cv2.resizeWindow(self.windowname, 640, 640)
+        # if event == cv2.EVENT_RBUTTONDOWN:
+        #     print("right click")
+        #     cv2.namedWindow(self.windowname, cv2.WINDOW_NORMAL)
+        #     cv2.imshow(self.windowname, self.raw)
+        #     cv2.resizeWindow(self.windowname, 640, 640)
 
         # draw a line
         if self.prev_pt and flags & cv2.EVENT_FLAG_LBUTTON:
@@ -817,10 +855,10 @@ class App(object):
         cv2.namedWindow('watershed', cv2.WINDOW_NORMAL)
         cv2.imshow('watershed', vis)
         cv2.resizeWindow("watershed", 640, 640)
-        plt.close()
-        plt.figure()
-        plt.imshow(self.markers, cmap='jet')
-        plt.show()
+        # plt.close()
+        # plt.figure()
+        # plt.imshow(self.markers, cmap='jet')
+        # plt.show()
 
     def run(self):
 
@@ -833,20 +871,9 @@ class App(object):
             if ch == 27:
                 break
 
-            if ch >= ord('1') and ch <= ord('7'):
-                self.cur_marker = ch - ord('0')
-                print('marker: ', self.cur_marker)
-
             if ch == ord("0"):
                 self.cur_marker = 0
                 print('marker: ', self.cur_marker)
-
-            if ch in [ord('q'), ord('Q')]:
-                self.eraser += 1
-                print("dot: ", self.eraser)
-            if ch in [ord('w'), ord('W')]:
-                self.eraser -= 1
-                print("dot: ", self.eraser)
 
             if ch in [ord('l'), ord('L')]:
                 self.cur_marker = self.cur_marker + 1
