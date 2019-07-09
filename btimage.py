@@ -255,7 +255,7 @@ class PhaseRetrieval(object):
         self.final_bg = None
         self.final = None
 
-    def phase_retrieval(self, m_factor, strategy="try", bg=(0, 0)):
+    def phase_retrieval(self, m_factor, strategy="try", sp=(0, 0)):
         # open img
         self.sp.open_image()
         self.bg.open_image()
@@ -270,10 +270,12 @@ class PhaseRetrieval(object):
         x, y = 0, 0
         if strategy == "try":
             x, y = self.try_the_position(self.sp)
+        elif strategy == "cheat":
+            x, y = sp[0], sp[1]
 
         # crop real or virtual image
         self.sp.crop_first_order(x, y, 768)
-        self.bg.crop_first_order(bg[0], bg[1], 768)
+        self.bg.crop_first_order(0, 2, 768)
         print(x, y)
 
         # iFFT
@@ -310,7 +312,7 @@ class PhaseRetrieval(object):
         mini = 100
         minj = 100
         for i in np.arange(-2, 3, 1):
-            for j in np.arange(-8, 3, 1):
+            for j in np.arange(-2, 3, 1):
                 bt_obj.crop_first_order(i, j, 768)
                 bt_obj.twodifft(bt_obj.crop_raw_f_domain)
                 unwrap_ = unwrap_phase(bt_obj.iff)
@@ -462,12 +464,15 @@ class TimeLapseCombo(object):
 
     def read(self, start, end):
         for i in range(start, end+1):
+
+            # read one BG
             found_bg = glob.glob(self.root_path + "*.bmp")
             if len(found_bg) < 1:
                 raise FileExistsError("BG lost")
             print("BG:", found_bg[0])
             self.pathbg_list.append(found_bg[0])
 
+            # read many SP
             path_cur = self.root_path + str(i) + "\\"
             check_file_exist(path_cur, "i")
             found_file = glob.glob(path_cur + "*.bmp")
@@ -476,8 +481,7 @@ class TimeLapseCombo(object):
             print("SP:", found_file[0])
             self.pathsp_list.append(found_file[0])
 
-
-    def combo(self, target=-1, save=False, m_factor=0):
+    def combo(self, target=-1, save=False, m_factor=0, strategy="try"):
         # create output file
         output_dir = self.root_path + "phase_npy//"
         if not path.exists(output_dir):
@@ -485,13 +489,13 @@ class TimeLapseCombo(object):
 
         # combo
         if target == -1:
-            for i in tqdm.trange(len(self.pathsp_list)):
+            for i, m in zip(range(len(self.pathsp_list)), np.arange(0.3, 0, -0.3/40)):
                 pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                 try:
-                    pr.phase_retrieval(m_factor, bg=(0, 2))
-                    print(np.std(pr.final))
+                    pr.phase_retrieval(m, sp=(0, 2))
+                    print(str(i)," SD:", np.std(pr.final))
                     if np.std(pr.final) > 1.2:
-                        pr.phase_retrieval(m_factor, bg=(0, 2))
+                        pr.phase_retrieval(m, sp=(1, -3), strategy=strategy)
                     pr.plot_final(center=False)
                     # pr.plot_hist()
                     if save:
@@ -505,9 +509,9 @@ class TimeLapseCombo(object):
             for i in tqdm.trange(len(self.pathsp_list)):
                 if i == target:
                     pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
-                    pr.phase_retrieval(m_factor, bg=(0, 2))
+                    pr.phase_retrieval(m_factor, sp=(0, 2))
                     if np.std(pr.final) > 1:
-                        pr.phase_retrieval(m_factor, bg=(0, 2))
+                        pr.phase_retrieval(m_factor, sp=(1, -3), strategy=strategy)
                     pr.plot_final(center=False)
                     pr.plot_hist()
                     pr.plot_sp_bg()
@@ -720,7 +724,7 @@ class CellLabelOneImage(object):
         local_maxi = peak_local_max(self.img, indices=False, footprint=np.ones((220, 220)), threshold_abs=20)
         marker[local_maxi == True] = 255
         kernel = np.ones((5, 5), np.uint8)
-        marker = np.uint8(cv2.dilate(marker, kernel, iterations=8))
+        marker = np.uint8(cv2.dilate(marker, kernel, iterations=10))
 
         ret, markers1 = cv2.connectedComponents(marker)
         markers1[self.sure_bg == 0] = 1
@@ -888,10 +892,24 @@ class App(object):
                 self.watershed()
                 self.sketch.dirty = False
 
-            # automatic update
+            # # automatic update
+            # if ch in [ord('a'), ord('A')]:
+            #     self.auto_update = not self.auto_update
+            #     print('auto_update if', ['off', 'on'][self.auto_update])
+
             if ch in [ord('a'), ord('A')]:
-                self.auto_update = not self.auto_update
-                print('auto_update if', ['off', 'on'][self.auto_update])
+                for label in range(81):
+                    if len(self.markers[self.markers == label]) == 0:
+                        print(label, " is available")
+
+            if ch in [ord('q'), ord('Q')]:
+                for label in range(2, 81):
+                    black = np.zeros((3072, 3072), dtype=np.uint8)
+                    black[self.m == label] = 255
+                    ret, b = cv2.connectedComponents(black)
+                    if ret > 2:
+                        print("label ", label, "is too many region!!")
+                print("Q: finish checking!")
 
             # reset
             if ch in [ord('r'), ord('R')]:
