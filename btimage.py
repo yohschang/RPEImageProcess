@@ -4,6 +4,7 @@ author: BT
 Date: 20190703
 
 class:
+    WorkFlow
     BT_image
     PhaseRetrieval
     PhaseCombo
@@ -12,6 +13,7 @@ class:
     CellLabelOneImage
     App
     Sketcher
+    PrevNowMatching
 
 function:
     check_file_exist
@@ -20,7 +22,7 @@ function:
 """
 
 import cv2
-from os import path, makedirs
+from os import makedirs
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -240,6 +242,31 @@ class BT_image(object):
         return self.crop_f_domain, tem_crop, x_final, y_final, crop_f_domain_test
 
 
+class WorkFlow(object):
+    def __init__(self, root):
+        self.root = root
+        check_file_exist(self.root, "root directory")
+        self.phase_npy_path = root + "phase_npy\\"
+        self.pic_path = root + "pic\\"
+        self.marker_path = root + "marker\\"
+        self.afterwater_path = root + "afterwater\\"
+        self.analysis_path = root + "analysis\\"
+        self.fluor_path = root + "fluor\\"
+
+        # create dir
+        self.create_dir(self.phase_npy_path)
+        self.create_dir(self.pic_path)
+        self.create_dir(self.marker_path)
+        self.create_dir(self.afterwater_path)
+        self.create_dir(self.analysis_path)
+        self.create_dir(self.fluor_path)
+
+    def create_dir(self, path):
+        my_file = Path(path)
+        if not my_file.exists():
+            makedirs(path)
+
+
 class PhaseRetrieval(object):
 
     def __init__(self, pathsp, pathbg):
@@ -383,81 +410,9 @@ class PhaseRetrieval(object):
         cv2.imwrite(dir_png + self.name + "_phase.png", rescale_img)
 
 
-class PhaseCombo(object):
-    """Using PhaseRetrieval, ShiftPi"""
-
+class TimeLapseCombo(WorkFlow):
     def __init__(self, root_path):
-        check_file_exist(root_path + "SP\\", "SP dir")
-        check_file_exist(root_path + "BG\\", "BG dir")
-        self.root = root_path
-        self.pathsp_list = glob.glob(root_path + "SP\\*.bmp")
-        for i in self.pathsp_list:
-            print(i)
-        self.pathbg_list = glob.glob(root_path + "BG\\*.bmp")
-
-        self.only_one_bg = True
-        self.check_input()
-
-    def check_input(self):
-        if not self.pathsp_list:
-            raise FileNotFoundError("no SP in this directory")
-        if not self.pathbg_list:
-            raise FileNotFoundError("no BG in this directory")
-        if not self.only_one_bg:
-            if len(self.pathsp_list) != len(self.pathbg_list):
-                raise AssertionError("SP length and BG length do not match!")
-
-    def combo(self, target=-1, save=False, m_factor=0):
-        # output
-        output_dir = self.root + "phase_npy//"
-        if not path.exists(output_dir):
-            makedirs(output_dir)
-
-        # combo
-        if target == -1:
-            for i in tqdm.trange(len(self.pathsp_list)):
-                pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
-                try:
-                    pr.phase_retrieval(m_factor)
-                    pr.plot_final(center=False)
-                    # pr.plot_hist()
-                    if save:
-                        pr.write_final(output_dir)
-                except TypeError as e:
-                    print(i, "th cannot be retrieved ", e)
-
-            # # shift pi
-            # print("Shift pi...")
-            # spp = ShiftPi(output_dir)
-            # spp.check_mean()
-            # spp.shift(shift1, shift2)
-            # print("Finish!")
-
-        else:
-            # only for checking
-            for i in tqdm.trange(len(self.pathsp_list)):
-                if i == target:
-                    pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
-                    pr.phase_retrieval(m_factor)
-                    pr.plot_final(center=False)
-                    pr.plot_hist()
-                    pr.plot_sp_bg()
-                    pr.plot_fdomain()
-                    if save:
-                        pr.write_final(output_dir)
-
-    def npy2png(self):
-        output_dir = self.root + "phase_npy//"
-        dir_list = glob.glob(output_dir + "*.npy")
-        for i in tqdm.trange(len(dir_list)):
-            im_test = BT_image(dir_list[i])
-            im_test.opennpy()
-            im_test.write_image(output_dir, im_test.img * 255/(3.5-(-1)))
-
-
-class TimeLapseCombo(object):
-    def __init__(self, root_path):
-        self.root_path = root_path
+        super().__init__(root_path)
         self.pathsp_list = []
         self.pathbg_list = []
         self.cur_num = 1
@@ -465,15 +420,15 @@ class TimeLapseCombo(object):
     def read(self, start, end):
         for i in range(start, end+1):
 
-            # read one BG
-            found_bg = glob.glob(self.root_path + "*.bmp")
+            # read one BG at the root dir
+            found_bg = glob.glob(self.root + "*.bmp")
             if len(found_bg) < 1:
                 raise FileExistsError("BG lost")
             print("BG:", found_bg[0])
             self.pathbg_list.append(found_bg[0])
 
             # read many SP
-            path_cur = self.root_path + str(i) + "\\"
+            path_cur = self.root + str(i) + "\\"
             check_file_exist(path_cur, "i")
             found_file = glob.glob(path_cur + "*.bmp")
             if len(found_file) != 1:
@@ -482,11 +437,6 @@ class TimeLapseCombo(object):
             self.pathsp_list.append(found_file[0])
 
     def combo(self, target=-1, save=False, m_factor=0, strategy="try"):
-        # create output file
-        output_dir = self.root_path + "phase_npy//"
-        if not path.exists(output_dir):
-            makedirs(output_dir)
-
         # combo
         if target == -1:
             for i, m in zip(range(len(self.pathsp_list)), np.arange(0.3, 0, -0.3/40)):
@@ -499,7 +449,7 @@ class TimeLapseCombo(object):
                     pr.plot_final(center=False)
                     # pr.plot_hist()
                     if save:
-                        np.save(output_dir + str(self.cur_num) + "_phase.npy", pr.final)
+                        np.save(self.phase_npy_path + str(self.cur_num) + "_phase.npy", pr.final)
                         self.cur_num += 1
                 except TypeError as e:
                     print(i, "th cannot be retrieved ", e)
@@ -518,7 +468,7 @@ class TimeLapseCombo(object):
                     print(np.std(pr.final))
                     # pr.plot_fdomain()
                     if save:
-                        np.save(output_dir + str(25) + "_phase.npy", pr.final)
+                        np.save(self.phase_npy_path + str(25) + "_phase.npy", pr.final)
                         # pr.write_final(output_dir)
 
 
@@ -573,18 +523,17 @@ class MatchFlourPhase(object):
         np.save(pathandname, self.completed)
 
 
-class CellLabelOneImage(object):
+class CellLabelOneImage(WorkFlow):
     """Instance recognition"""
 
-    def __init__(self, path, save_path, current_image_num):
-        im = BT_image(path)
-        im.opennpy()
-        self.img = im.img
-        check_img_size(self.img)
-        self.save_path = save_path
-        check_file_exist(self.save_path, "save path")
+    def __init__(self, root, target=-1):
+        super().__init__(root)
 
-        self.current_image_num = current_image_num
+        # open image
+        self.img = np.load(self.phase_npy_path + str(target) + "_phase.npy")
+        check_img_size(self.img)
+
+        self.target = target
         self.img_origin = None
         self.sure_bg = None
         self.sure_fg = None
@@ -593,7 +542,7 @@ class CellLabelOneImage(object):
         self.after_water = None
         self.plot_mode = False
 
-    def run(self, adjust=False, plot_mode=False, marker_file=None):
+    def run(self, adjust=False, plot_mode=False, load_old=False, save_water=False):
         self.plot_mode = plot_mode
         self.phase2uint8()
         self.smoothing()
@@ -606,8 +555,16 @@ class CellLabelOneImage(object):
         self.watershed_algorithm()
 
         if adjust:
+            if load_old:
+                marker_file = self.marker_path + str(self.target) + "_marker.npy"
+                check_file_exist(marker_file, str(self.target) + "_marker.npy")
+            else:
+                marker_file = None
             self.watershed_manually(marker_file)
 
+        if save_water:
+            np.save(self.afterwater_path + str(self.target) + "_afterwater.npy", self.after_water)
+            print("saving  ", self.afterwater_path + str(self.target) + "_afterwater.npy")
         return self.after_water
 
     def plot_gray(self, image, title_str):
@@ -738,6 +695,9 @@ class CellLabelOneImage(object):
         cv2.watershed(rgb, self.after_water)
         if self.plot_mode:
             self.plot_gray(self.after_water, "watershed image")
+        ###########################################################
+        # if no manually adjust, self.after_water is final output #
+        ###########################################################
 
     def watershed_manually(self, marker_file=None):
         """Implement App"""
@@ -751,12 +711,12 @@ class CellLabelOneImage(object):
             except:
                 raise FileExistsError("cannot open marker file")
 
-        r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.save_path, cur_img_num=self.current_image_num)
+        r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.marker_path, cur_img_num=self.target)
         r.run()
         self.after_water = r.m
 
 
-class Sketcher:
+class Sketcher(object):
     def __init__(self, windowname, dests, colors_func, eraser):
         self.prev_pt = None
         self.windowname = windowname
@@ -822,11 +782,14 @@ class App(object):
 
         """
     def __init__(self, fn, existed_marker, show_img, save_path, cur_img_num):
+        # input parameter
         self.img = fn
-        self.show_img = show_img
-        h, w = self.img.shape[:2]
-        self.cur_img_num = cur_img_num
         self.markers = existed_marker
+        self.show_img = show_img
+        self.save_path = save_path
+        self.cur_img_num = cur_img_num
+
+        # create parameter
         self.markers_vis = self.show_img.copy()
         self.cur_marker = 1
         self.colors = jet_color
@@ -834,11 +797,11 @@ class App(object):
         self.m = None
 
         # marker pen diameter
-        self.eraser = 20
+        diameter = 20
         self.auto_update = False
-        self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.get_colors, self.eraser)
 
-        self.save_path = save_path
+        # canvas
+        self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.get_colors, diameter)
 
     def get_colors(self):
         # print(list(map(int, self.colors[self.cur_marker])))
@@ -931,6 +894,157 @@ class App(object):
         cv2.destroyAllWindows()
 
 
+class PrevNowMatching(object):
+    """ creare the list of linkage"""
+    def __init__(self, prev, now):
+        self.prev_label_map = prev
+        self.now_label_map = now
+        self.prev_list = []
+        self.now_list = []
+        self.output = None
+
+        # lost map
+        self.lost_map = np.zeros((3072, 3072))
+
+        # plot input
+        self.show(self.prev_label_map, "prev_label_map")
+        # self.show(self.now_label_map, "now_label_map")
+
+    def run(self):
+        self.check_prev_label()
+        self.check_now_label()
+        self.first_round_matching()
+        self.second_round_matching()
+        return self.output
+
+    def show(self, image, text):
+        plt.figure()
+        plt.imshow(image, cmap='jet', vmax=80, vmin=0)
+        plt.title(text)
+        plt.show()
+
+    def check_prev_label(self):
+        for label in range(81):
+            cur_label_num = len(self.prev_label_map[self.prev_label_map == label])
+            if 4000 <= cur_label_num <= 1000000:
+                # remove too small area and BG area
+                self.prev_list.append(label)
+                # print("label:", label, "has:", cur_label_num, "pixel")
+
+    def check_now_label(self):
+        for label in range(81):
+            cur_label_num = len(self.now_label_map[self.now_label_map == label])
+            if 4000 <= cur_label_num <= 1000000:
+                # remove too small area and BG area
+                self.now_list.append(label)
+                # print("label:", label, "has:", cur_label_num, "pixel")
+
+    def first_round_matching(self):
+        self.output = self.now_label_map.copy()
+        iterative_label = self.prev_list.copy()
+        # find prev label
+        for i in range(len(iterative_label)):
+            # choose iterative label in box
+            label = iterative_label[i]
+
+            # find corresponding label in now
+            black = np.zeros((3072, 3072))
+            black[self.prev_label_map == label] = 255
+            x, y = self.centroid(black)
+            corresponded_label = self.now_label_map[y, x]
+
+            # black[self.now_label_map == corresponded_label] = 100
+            # plt.figure()
+            # plt.imshow(black, cmap='gray', vmax=255, vmin=0)
+            # plt.scatter(x, y, s=20, c="g")
+            # plt.show()
+
+            # print("prev label:", label, "match --> now label: ", corresponded_label)
+
+            if corresponded_label != 1:
+                # registering corresponding label into new_now_map
+                self.output[self.now_label_map == corresponded_label] = label
+                # pop corresponded_label
+                self.prev_list.remove(label)
+                self.now_list.remove(corresponded_label)
+
+            elif corresponded_label == 1:
+                print("prev label:", label, "match BG label !!!!!")
+                print()
+                self.lost_map[self.prev_label_map == label] = 100
+
+        if self.now_list:
+            for i in self.now_list:
+                self.lost_map[self.now_label_map == i] = 200
+
+        self.show(self.output, "new_now_map")
+        plt.figure()
+        plt.imshow(self.lost_map, cmap='jet')
+        plt.figtext(0.83, 0.5, "g: disappear\nr: appear", transform=plt.gcf().transFigure)
+        plt.title("lost_map")
+        plt.show()
+
+    def second_round_matching(self):
+        print("disappear: ", self.prev_list)
+        print("appear: ", self.now_list)
+        if self.prev_list and self.now_list:
+            for disappear in self.prev_list:
+                for appear in self.now_list:
+                    black = np.zeros((3072, 3072))
+                    if len(black[(self.prev_label_map == disappear) & (self.now_label_map == appear)]) != 0:
+                        # find overlap
+                        print("Round 2 : prev label:", disappear, "match --> now label: ", appear)
+                        self.output[self.now_label_map == appear] = disappear
+        print("finish second round!")
+
+    def centroid(self, binary_image):
+        """ find centroid"""
+        moments = cv2.moments(binary_image)
+        if moments['m00'] != 0:
+            centroid_x = int(moments['m10'] / moments['m00'])
+            centroid_y = int(moments['m01'] / moments['m00'])
+        else:
+            centroid_y, centroid_x = 0, 0
+            print("Cannot find centroid!")
+        return centroid_x, centroid_y
 
 
+class PrevNowCombo(WorkFlow):
+    def __init__(self, root):
+        super().__init__(root)
+        self.prev = None
+        self.now = None
+
+    def combo(self, now_target=-1, save=False):
+        self.prev = np.load(self.afterwater_path + str(now_target-1) + "_afterwater.npy")
+        self.now = np.load(self.afterwater_path + str(now_target) + "_afterwater.npy")
+        output = PrevNowMatching(self.prev, self.now).run()
+        if save:
+            np.save(self.afterwater_path + str(now_target) + "_afterwater.npy", output)
+
+
+###########################################################################################
+class AnalysisCellFeature(object):
+    def __init__(self):
+        self.phase_img_list = None
+        self.label_img_list = None
+
+    def one_by_one(self):
+        pass
+
+
+class Cell(object):
+    def __init__(self):
+        # basic attribute
+        self.id = -1
+        self.disappear = False
+        self.disappear_frame = -1
+
+        # label
+        self.full_attendance = False
+
+        # list of feature
+        self.cell_area = []
+        self.circularity = []
+        self.cell_phase_mean = []
 
