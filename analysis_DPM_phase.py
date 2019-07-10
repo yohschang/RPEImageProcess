@@ -1,43 +1,12 @@
 import numpy as np
 # import cv2
 from matplotlib import pyplot as plt
-from btimage import BT_image, PhaseCombo, round_all_the_entries_ndarray
+from btimage import BT_image, round_all_the_entries_ndarray
 import glob
 import tqdm
 import pandas as pd
 from sklearn.metrics import r2_score
 import os
-
-p = "E:\\DPM\\20190701\\"
-# rename
-# path = "E:\\DPM\\20190628\\SP\\"
-# for i in range(1, 31):
-#     file_old_name = path + str(i) + ".bmp"
-#     file_new_name = path + "a" * i + str(i) + ".bmp"
-#     print(file_old_name)
-#     os.rename(file_old_name, file_new_name)
-
-
-implement = PhaseCombo(p)
-# implement.combo(m_factor=0.4, save=False)
-
-implement.combo(target=2, m_factor=0.4, save=True)
-# implement.npy2png()
-
-
-# path_look = "E:\\DPM\\20190628\\phase_npy\\*.npy"
-# list_look = glob.glob(path_look)
-# for i in tqdm.trange(len(list_look)):
-#
-#     im = BT_image(list_look[i])
-#     im.opennpy()
-#     plt.figure()
-#     plt.imshow(im.img, cmap='jet', vmax=3.5, vmin=-0.5)
-#     plt.colorbar()
-#     plt.savefig(p + str(i) + ".png")
-#     plt.show()
-
-
 
 
 # read bead verify
