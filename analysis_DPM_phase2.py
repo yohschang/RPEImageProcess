@@ -50,13 +50,27 @@ image_template = im_tem.board[38:130, 38:130]
 image_template = image_template.astype(np.float32)
 im_tem.plot_it(image_template)
 im_test.append(image_template.flatten())
+
+# fig, axes = plt.subplots(2, 4, figsize=(12, 6))
+# a, b = 0, 0
+# i = 0
+#
+# for a, b, i in zip([0,0,0,0,1,1,1,1], [0,1,2,3,0,1,2,3], [0,1,2,4,5,6,7,8]):
+#     img_tar = BT_image(list_[i])
+#     img_tar.open_raw_image()
+#     img_tar.crop(center_list[i][0], center_list[i][1])
+#     axes[a, b].imshow(img_tar.img, cmap='gray')
+#     axes[a, b].set_title(img_tar.name.strip("phimap"), fontsize=15)
+#     axes[a, b].axis('off')
+# fig.tight_layout()
+# fig.show()
+
 for i in tqdm.trange(len(list_)):
     if i != -1:
         img_tar = BT_image(list_[i])
         img_tar.open_raw_image()
-
         img_tar.crop(center_list[i][0], center_list[i][1])
-        img_tar.plot_it(img_tar.img)
+        # img_tar.plot_it(img_tar.img)
         result = cv2.matchTemplate(img_tar.img, image_template, cv2.TM_CCORR)
         # plt.figure()
         # plt.imshow(result, cmap='gray')
@@ -65,7 +79,7 @@ for i in tqdm.trange(len(list_)):
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
         print(i, "th :", max_val, max_loc)
         # img_tem.write_image(path)
-        # im_square.append(img_tar.img.flatten())
+        im_square.append(img_tar.img.flatten())
 
         # circle
         # img_tem.find_centroid()
@@ -83,7 +97,7 @@ for i in tqdm.trange(len(list_)):
         startx = center_list[i][0] + row_shift - b
         starty = center_list[i][1] + col_shift - b
         img_regis.img = img_regis.img[starty: starty+92, startx: startx+92]
-        img_regis.plot_it(img_regis.img)
+        # img_regis.plot_it(img_regis.img)
         im_circle.append(img_regis.img.flatten())
         if i == 3:
             im_test.append(img_regis.img.flatten())
@@ -107,34 +121,54 @@ df.insert(0, " ", col)
 # matrix_circle_test = np.corrcoef(im_test)
 # df_test = pd.DataFrame(data=matrix_circle_test)
 
-# # calculate linearity
-# m_list = []
-# b_list = []
-# r2_list = []
-# # for i in tqdm.trange(len(col)):
-# i = 3
-# for j in range(len(col)):
-#     (m, b) = np.polyfit(im_circle[i], im_circle[j], 1)
-#     sort_x = np.sort(im_circle[i])
-#
-#     yp = np.polyval([m, b], sort_x)
-#     coef = r2_score(im_circle[i], im_circle[j])
-#     plt.figure()
-#     plt.scatter(im_circle[i], im_circle[j], s=2)
-#     plt.title("Comparison of phase per pixel between {} and {}".format(col[i], col[j]))
-#     plt.plot(sort_x, yp, 'r', label="y={}*x + {}.\nR square={}".format(round(m,2), round(b,2), round(coef,2)))
-#     plt.legend()
-#     plt.xlabel("phase (rad)")
-#     plt.ylabel("phase (rad)")
-#     # plt.savefig("E:\\DPM\\20190609\\{}_{}.png".format(i, j))
-#     plt.show()
-#     m_list.append(m)
-#     b_list.append(b)
-#     r2_list.append(coef)
+# calculate linearity
+m_list = []
+b_list = []
+r2_list = []
+# for i in tqdm.trange(len(col)):
+i = 3
 
-# print("m mean: ", np.mean(m_list), "\nm sd: ", np.std(m_list))
-# print("b mean: ", np.mean(b_list), "\nb sd: ", np.std(b_list))
-# print("r2 mean: ", np.mean(r2_list), "\nr2 sd: ", np.std(r2_list))
+fig, axes = plt.subplots(2, 4, figsize=(12, 6), sharex=True, sharey=True)
+a, b = 0, 0
+#
+# for a, b, i in zip([0,0,0,0,1,1,1,1], [0,1,2,3,0,1,2,3], [0,1,2,4,5,6,7,8]):
+#     axes[a, b].imshow(img_tar.img, cmap='gray')
+#     axes[a, b].set_title(img_tar.name.strip("phimap"), fontsize=15)
+#     axes[a, b].axis('off')
+
+for p, k, j in zip([0,0,0,0,1,1,1,1], [0,1,2,3,0,1,2,3], [0,1,2,4,5,6,7,8]):
+    (m, b) = np.polyfit(im_circle[3], im_circle[j], 1)
+    sort_x = np.sort(im_circle[3])
+
+    yp = np.polyval([m, b], sort_x)
+    coef = r2_score(im_circle[3], im_circle[j])
+    # plt.figure()
+    # plt.scatter(im_circle[3], im_circle[j], s=2)
+    # plt.title(" {} and {}".format(col[3], col[j]))
+    # plt.plot(sort_x, yp, 'r', label="y={}*x + {}.\nR square={}".format(round(m,2), round(b,2), round(coef,2)))
+    # plt.legend()
+    # plt.xlabel("phase (rad)")
+    # plt.ylabel("phase (rad)")
+    axes[p, k].plot(sort_x, yp, 'r', label="y={}*x+{}.\nR square={}".format(round(m,2), round(b,2), round(coef,2)))
+    axes[p, k].set_title(" {} and {}".format(col[3], col[j]), fontsize=10)
+    axes[p, k].scatter(im_circle[3], im_circle[j], s=1)
+    axes[p, k].legend(fontsize=8)
+    if k == 0:
+        axes[p, k].set_ylabel("phase (rad)")
+    if p == 1:
+        axes[p, k].set_xlabel("phase (rad)")
+    # plt.savefig("E:\\DPM\\20190609\\{}_{}.png".format(i, j))
+    plt.show()
+    m_list.append(m)
+    b_list.append(b)
+    r2_list.append(coef)
+
+fig.tight_layout()
+fig.show()
+
+print("m mean: ", np.mean(m_list), "\nm sd: ", np.std(m_list))
+print("b mean: ", np.mean(b_list), "\nb sd: ", np.std(b_list))
+print("r2 mean: ", np.mean(r2_list), "\nr2 sd: ", np.std(r2_list))
 
 
 # img_demo = BT_image(path + "center2_save.bmp")

@@ -575,6 +575,11 @@ class CellLabelOneImage(WorkFlow):
         plt.show()
 
     def phase2uint8(self):
+        plt.figure()
+        plt.title(str(self.target) + "original image")
+        plt.imshow(self.img, cmap='jet', vmax=3.5, vmin=-0.2)
+        plt.colorbar()
+        plt.show()
         self.img[self.img >= 4] = 0
         self.img[self.img <= -0.5] = -0.5
         max_value = self.img.max()
@@ -681,7 +686,7 @@ class CellLabelOneImage(WorkFlow):
         local_maxi = peak_local_max(self.img, indices=False, footprint=np.ones((220, 220)), threshold_abs=20)
         marker[local_maxi == True] = 255
         kernel = np.ones((5, 5), np.uint8)
-        marker = np.uint8(cv2.dilate(marker, kernel, iterations=10))
+        marker = np.uint8(cv2.dilate(marker, kernel, iterations=15))
 
         ret, markers1 = cv2.connectedComponents(marker)
         markers1[self.sure_bg == 0] = 1
@@ -816,7 +821,7 @@ class App(object):
         cv2.watershed(self.img, self.m)
 
         # transfer marker to color but remove negative marker
-        self.overlay = self.colors[np.maximum(self.m, 0)*3]
+        self.overlay = self.colors[np.maximum(self.m, 0)*2]
 
         vis = cv2.addWeighted(self.img, 0.5, self.overlay, 0.5, 0.0, dtype=cv2.CV_8UC3)
         cv2.namedWindow('watershed', cv2.WINDOW_NORMAL)
@@ -861,12 +866,12 @@ class App(object):
             #     print('auto_update if', ['off', 'on'][self.auto_update])
 
             if ch in [ord('a'), ord('A')]:
-                for label in range(81):
+                for label in range(85):
                     if len(self.markers[self.markers == label]) == 0:
                         print(label, " is available")
 
             if ch in [ord('q'), ord('Q')]:
-                for label in range(2, 81):
+                for label in range(2, 85):
                     black = np.zeros((3072, 3072), dtype=np.uint8)
                     black[self.m == label] = 255
                     ret, b = cv2.connectedComponents(black)
@@ -908,7 +913,7 @@ class PrevNowMatching(object):
 
         # plot input
         self.show(self.prev_label_map, "prev_label_map")
-        # self.show(self.now_label_map, "now_label_map")
+        self.show(self.now_label_map, "now_label_map")
 
     def run(self):
         self.check_prev_label()
@@ -919,12 +924,12 @@ class PrevNowMatching(object):
 
     def show(self, image, text):
         plt.figure()
-        plt.imshow(image, cmap='jet', vmax=80, vmin=0)
+        plt.imshow(image, cmap='jet', vmax=90, vmin=0)
         plt.title(text)
         plt.show()
 
     def check_prev_label(self):
-        for label in range(81):
+        for label in range(90):
             cur_label_num = len(self.prev_label_map[self.prev_label_map == label])
             if 4000 <= cur_label_num <= 1000000:
                 # remove too small area and BG area
@@ -932,7 +937,7 @@ class PrevNowMatching(object):
                 # print("label:", label, "has:", cur_label_num, "pixel")
 
     def check_now_label(self):
-        for label in range(81):
+        for label in range(90):
             cur_label_num = len(self.now_label_map[self.now_label_map == label])
             if 4000 <= cur_label_num <= 1000000:
                 # remove too small area and BG area
@@ -946,6 +951,7 @@ class PrevNowMatching(object):
         for i in range(len(iterative_label)):
             # choose iterative label in box
             label = iterative_label[i]
+
 
             # find corresponding label in now
             black = np.zeros((3072, 3072))
@@ -965,28 +971,20 @@ class PrevNowMatching(object):
                 # registering corresponding label into new_now_map
                 self.output[self.now_label_map == corresponded_label] = label
                 # pop corresponded_label
-                self.prev_list.remove(label)
-                self.now_list.remove(corresponded_label)
+                try:
+                    self.prev_list.remove(label)
+                except:
+                    pass
+                try:
+                    self.now_list.remove(corresponded_label)
+                except:
+                    pass
 
             elif corresponded_label == 1:
                 print("prev label:", label, "match BG label !!!!!")
                 print()
-                self.lost_map[self.prev_label_map == label] = 100
-
-        if self.now_list:
-            for i in self.now_list:
-                self.lost_map[self.now_label_map == i] = 200
-
-        self.show(self.output, "new_now_map")
-        plt.figure()
-        plt.imshow(self.lost_map, cmap='jet')
-        plt.figtext(0.83, 0.5, "g: disappear\nr: appear", transform=plt.gcf().transFigure)
-        plt.title("lost_map")
-        plt.show()
 
     def second_round_matching(self):
-        print("disappear: ", self.prev_list)
-        print("appear: ", self.now_list)
         if self.prev_list and self.now_list:
             for disappear in self.prev_list:
                 for appear in self.now_list:
@@ -995,7 +993,27 @@ class PrevNowMatching(object):
                         # find overlap
                         print("Round 2 : prev label:", disappear, "match --> now label: ", appear)
                         self.output[self.now_label_map == appear] = disappear
+        # appear
+        print("appear: ", self.now_list)
+        if self.now_list:
+            for i in self.now_list:
+                self.lost_map[self.now_label_map == i] = 200
+                # if appear, then cancel their label
+                self.output[self.now_label_map == i] = 1
+
+        # disappear
+        print("disappear: ", self.prev_list)
+        if self.prev_list:
+            for i in self.prev_list:
+                self.lost_map[self.prev_label_map == i] = 100
+
         print("finish second round!")
+        self.show(self.output, "new_now_map")
+        plt.figure()
+        plt.imshow(self.lost_map, cmap='jet')
+        plt.figtext(0.83, 0.5, "g: disappear\nr: appear", transform=plt.gcf().transFigure)
+        plt.title("lost_map")
+        plt.show()
 
     def centroid(self, binary_image):
         """ find centroid"""
@@ -1024,17 +1042,47 @@ class PrevNowCombo(WorkFlow):
 
 
 ###########################################################################################
-class AnalysisCellFeature(object):
-    def __init__(self):
+class AnalysisCellFeature(WorkFlow):
+    def __init__(self, root):
+        super().__init__(root)
+
+        # find 40 frames in afterwater_path
+        # self.afterwater_path
+
+        # find phase image in phase npy
+        # self.phase_npy_path
+
+        # check the length of phase and label is 40
+
         self.phase_img_list = None
         self.label_img_list = None
 
     def one_by_one(self):
         pass
+        # for each label of the first frame
+
+        # calculate phase mean
+
+        # calculate area
+
+        # calculate circularity
+
+        # calculate distribution
+
+        # create cell object
+
+    def connect_to_db(self):
+        # use db to store the feature, crop phase image
+        pass
+
+    def plot_the_graph(self):
+        # take the data and plot it in different plot
+        pass
 
 
 class Cell(object):
     def __init__(self):
+        """RPE cell"""
         # basic attribute
         self.id = -1
         self.disappear = False
