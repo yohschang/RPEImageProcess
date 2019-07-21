@@ -90,7 +90,7 @@ def round_all_the_entries_ndarray(matrix, decimal):
 def check_file_exist(this_path, text):
     my_file = Path(this_path)
     if not my_file.exists():
-        raise OSError("Cannot find " + text + "!")
+        raise OSError("Cannot find " + str(text) + "!")
 
 
 def check_img_size(image):
@@ -302,7 +302,7 @@ class PhaseRetrieval(object):
 
         # crop real or virtual image
         self.sp.crop_first_order(x, y, 768)
-        self.bg.crop_first_order(0, 2, 768)
+        self.bg.crop_first_order(0, 0, 768)
         print(x, y)
 
         # iFFT
@@ -310,6 +310,7 @@ class PhaseRetrieval(object):
         self.bg.twodifft(self.bg.crop_raw_f_domain)
         self.wrapped_sp = self.sp.iff
         self.wrapped_bg = self.bg.iff
+        # self.plot_fdomain()
 
         # unwapping
         self.unwarpped_sp = unwrap_phase(self.wrapped_sp)
@@ -385,7 +386,7 @@ class PhaseRetrieval(object):
         fig.colorbar(im, cax=cbar_ax)
         plt.show()
 
-    def plot_final(self, center=False):
+    def plot_final(self, center=False, num=0):
         """beware of Memory"""
         plt.figure(dpi=200, figsize=(10, 10))
         if center:
@@ -393,7 +394,7 @@ class PhaseRetrieval(object):
         else:
             plt.imshow(self.final, cmap='jet', vmin=-0.5, vmax=3)
         plt.colorbar()
-        plt.title("sp - bg")
+        plt.title("sp - bg"+str(num))
         plt.show()
 
     def plot_hist(self):
@@ -442,11 +443,11 @@ class TimeLapseCombo(WorkFlow):
             for i, m in zip(range(len(self.pathsp_list)), np.arange(0.3, 0, -0.3/40)):
                 pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                 try:
-                    pr.phase_retrieval(m, sp=(0, 2))
-                    print(str(i)," SD:", np.std(pr.final))
-                    if np.std(pr.final) > 1.2:
-                        pr.phase_retrieval(m, sp=(1, -3), strategy=strategy)
-                    pr.plot_final(center=False)
+                    pr.phase_retrieval(m, sp=(0, 0), strategy=strategy)
+                    print(str(i), " SD:", np.std(pr.final))
+                    if np.std(pr.final) > 1.51:
+                        pr.phase_retrieval(m, sp=(0, 4), strategy=strategy)
+                    pr.plot_final(center=False, num=i)
                     # pr.plot_hist()
                     if save:
                         np.save(self.phase_npy_path + str(self.cur_num) + "_phase.npy", pr.final)
@@ -459,16 +460,17 @@ class TimeLapseCombo(WorkFlow):
             for i in tqdm.trange(len(self.pathsp_list)):
                 if i == target:
                     pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
-                    pr.phase_retrieval(m_factor, sp=(0, 2))
+                    pr.phase_retrieval(m_factor, sp=(0, 0))
                     if np.std(pr.final) > 1:
-                        pr.phase_retrieval(m_factor, sp=(1, -3), strategy=strategy)
-                    pr.plot_final(center=False)
+                        pr.phase_retrieval(m_factor, sp=(0, 0), strategy=strategy)
+                    pr.plot_final(center=False, num=i)
                     pr.plot_hist()
                     pr.plot_sp_bg()
                     print(np.std(pr.final))
                     # pr.plot_fdomain()
                     if save:
-                        np.save(self.phase_npy_path + str(25) + "_phase.npy", pr.final)
+                        np.save(self.phase_npy_path + str(i) + "_phase.npy", pr.final)
+                        print(self.phase_npy_path + str(i) + "_phase.npy")
                         # pr.write_final(output_dir)
 
 
@@ -1095,4 +1097,35 @@ class Cell(object):
         self.cell_area = []
         self.circularity = []
         self.cell_phase_mean = []
+
+
+class Fov(WorkFlow):
+    def __init__(self, root, start, end):
+        super().__init__(root)
+        self.file_list = [self.phase_npy_path + str(p) + "_phase.npy" for p in range(start, end+1)]
+        self.pic_save = [self.pic_path + str(p) + ".png" for p in range(start, end+1)]
+        self.cur_num = [str(p) for p in range(start, end+1)]
+        self.check_file()
+
+    def check_file(self):
+        for p in self.file_list:
+            check_file_exist(p, p)
+
+    def run(self):
+        center = (3072//2, 3072//2)
+        radius = 3072//2
+        for i, im_p, pic_p in zip(self.cur_num, self.file_list, self.pic_save):
+            print(im_p)
+            img = np.load(im_p)
+            black = np.zeros((3072, 3072), dtype=np.uint8)
+            black = cv2.circle(black, center, radius, 1, thickness=-1)
+            img[black == 0] = 0
+            np.save(im_p, img)
+            plt.figure(i)
+            plt.title(i + "phase image")
+            plt.imshow(img, cmap='jet', vmax=3, vmin=-0.2)
+            plt.axis("off")
+            plt.colorbar()
+            plt.savefig(pic_p)
+            plt.close(i)
 

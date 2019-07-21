@@ -51,19 +51,19 @@ image_template = image_template.astype(np.float32)
 im_tem.plot_it(image_template)
 im_test.append(image_template.flatten())
 
-# fig, axes = plt.subplots(2, 4, figsize=(12, 6))
-# a, b = 0, 0
-# i = 0
-#
-# for a, b, i in zip([0,0,0,0,1,1,1,1], [0,1,2,3,0,1,2,3], [0,1,2,4,5,6,7,8]):
-#     img_tar = BT_image(list_[i])
-#     img_tar.open_raw_image()
-#     img_tar.crop(center_list[i][0], center_list[i][1])
-#     axes[a, b].imshow(img_tar.img, cmap='gray')
-#     axes[a, b].set_title(img_tar.name.strip("phimap"), fontsize=15)
-#     axes[a, b].axis('off')
-# fig.tight_layout()
-# fig.show()
+fig, axes = plt.subplots(4, 2, figsize=(6, 12))
+a, b = 0, 0
+i = 0
+
+for a, b, i in zip([0,1,2,3,0,1,2,3], [0,0,0,0,1,1,1,1], [0,1,2,4,5,6,7,8]):
+    img_tar = BT_image(list_[i])
+    img_tar.open_raw_image()
+    img_tar.crop(center_list[i][0], center_list[i][1])
+    axes[a, b].imshow(img_tar.img, cmap='gray')
+    axes[a, b].set_title(img_tar.name.strip("phimap"), fontsize=15)
+    axes[a, b].axis('off')
+fig.tight_layout()
+fig.show()
 
 for i in tqdm.trange(len(list_)):
     if i != -1:

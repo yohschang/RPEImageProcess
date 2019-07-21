@@ -14,3 +14,8 @@ change_file_path = "E:\\DPM\\20190708\\Bead\\2\\SP\\time-lapse\\"
 #     new = str(i+30)
 #     check_file_exist(change_file_path+dir_num, dir_num)
 #     os.rename(change_file_path+dir_num, change_file_path+new)
+
+import cv2
+im = BT_image("E:\\DPM\\20190708\\Bead\\1\\SP\\time-lapse\\pic\\1.tif")
+im.open_image(color=False)
+image = cv2.cvtColor(im.img, cv2.COLOR_BGR2GRAY)
