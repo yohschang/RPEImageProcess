@@ -7,7 +7,7 @@ import glob
 from matplotlib import pyplot as plt
 
 
-root_path = "E:\\DPM\\20190717\\time-lapse\\"
+root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 
 ####################################################################################
 # t = TimeLapseCombo(root_path=root_path)
@@ -20,8 +20,8 @@ root_path = "E:\\DPM\\20190717\\time-lapse\\"
 
 
 ####################################################################################
-current_target = 1
-after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load_old=False, save_water=True)
+current_target = 11
+after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load_old=True, save_water=True)
 plt.close()
 plt.figure()
 plt.title(str(current_target) + "label img")

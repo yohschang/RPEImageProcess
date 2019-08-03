@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, String, Float, Integer
+from sqlalchemy import Column, String, Float, Integer, Boolean
 import pandas as pd
 
 engine = create_engine('mysql+pymysql://BT:x1x4x5x6@127.0.0.1:3306/Cell')
@@ -24,8 +24,10 @@ class RetinalPigmentEpithelium(Base):
     phase_std = Column('phase_std', Float)
     circularity = Column('circularity', Float)
     area = Column('area', Float)
+    apoptosis = Column("apoptosis", Boolean)
 
     img_path = Column('img_path', String(150))
+    label_path = Column("label_path", String(150))
 
     def __init__(self, id, year, month, day, label, time_lapse_num, path):
         self.id = id
@@ -40,6 +42,7 @@ class RetinalPigmentEpithelium(Base):
         self.phase_std = 0.0
         self.circularity = 0.0
         self.area = 0.0
+        self.apoptosis = False
 
     def __repr__(self):
         repr_str1 = "<RetinalPigmentEpithelium("

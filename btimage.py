@@ -261,6 +261,10 @@ class WorkFlow(object):
         self.create_dir(self.analysis_path)
         self.create_dir(self.fluor_path)
 
+        # prepare
+        self.kaggle_img_path = "C:\\Users\\BT\\Desktop\\kaggle\\RPE_crop_image\\"
+        self.kaggle_mask_path = "C:\\Users\\BT\\Desktop\\kaggle\\RPE_crop_mask\\"
+
     def create_dir(self, path):
         my_file = Path(path)
         if not my_file.exists():
@@ -1044,6 +1048,9 @@ class PrevNowCombo(WorkFlow):
 
 
 ###########################################################################################
+
+
+
 class AnalysisCellFeature(WorkFlow):
     def __init__(self, root):
         super().__init__(root)
