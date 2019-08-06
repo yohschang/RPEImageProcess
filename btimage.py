@@ -138,6 +138,16 @@ class BT_image(object):
         fd.close()
         self.img = im_real
 
+    def phase2int8(self):
+        self.img[self.img >= 3.5] = 0
+        self.img[self.img <= -0.2] = -0.5
+        max_value = self.img.max()
+        min_value = self.img.min()
+        image_rescale = (self.img - min_value) * 255 / (max_value - min_value)
+        t, image_rescale = cv2.threshold(image_rescale, 255, 255, cv2.THRESH_TRUNC)
+        t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
+        self.img = np.uint8(np.round(image_rescale))
+
     def scaling_image(self, x, y):
         self.img = cv2.resize(self.img, None, fx=x, fy=y, interpolation=cv2.INTER_LINEAR)
 
@@ -571,6 +581,10 @@ class CellLabelOneImage(WorkFlow):
         if save_water:
             np.save(self.afterwater_path + str(self.target) + "_afterwater.npy", self.after_water)
             print("saving  ", self.afterwater_path + str(self.target) + "_afterwater.npy")
+
+        if self.after_water is None:
+            raise EOFError("You must go watershed once!")
+
         return self.after_water
 
     def plot_gray(self, image, title_str):
@@ -728,13 +742,13 @@ class CellLabelOneImage(WorkFlow):
 
 
 class Sketcher(object):
-    def __init__(self, windowname, dests, colors_func, eraser):
+    def __init__(self, windowname, dests, colors_func):
         self.prev_pt = None
         self.windowname = windowname
         self.dests = dests
         self.colors_func = colors_func
         self.dirty = False
-        self.eraser = eraser
+        self.diameter = 20
         self.show()
         self.mouse_track = None
         cv2.setMouseCallback(self.windowname, self.on_mouse)
@@ -751,17 +765,19 @@ class Sketcher(object):
         if event == cv2.EVENT_LBUTTONDOWN:
             self.prev_pt = pt
 
-        # if event == cv2.EVENT_RBUTTONDOWN:
-        #     print("right click")
-        #     cv2.namedWindow(self.windowname, cv2.WINDOW_NORMAL)
-        #     cv2.imshow(self.windowname, self.raw)
-        #     cv2.resizeWindow(self.windowname, 640, 640)
+        if event == cv2.EVENT_RBUTTONDOWN:
+            if self.diameter == 20:
+                print("large diameter!!")
+                self.diameter = 50
+            else:
+                print("small diameter")
+                self.diameter = 20
 
         # draw a line
         if self.prev_pt and flags & cv2.EVENT_FLAG_LBUTTON:
             # print(self.colors_func())
             for dst, color in zip(self.dests, self.colors_func()):
-                cv2.line(dst, self.prev_pt, pt, color, self.eraser)
+                cv2.line(dst, self.prev_pt, pt, color, self.diameter)
             self.dirty = True
             self.prev_pt = pt
             self.mouse_track = pt
@@ -775,14 +791,6 @@ class App(object):
     """
             Watershed segmentation
             =========
-
-            This program demonstrates the watershed segmentation algorithm
-            in OpenCV: watershed().
-
-            Usage
-            -----
-            watershed.py [image filename]
-
             Keys
             ----
               1-7   - switch marker color
@@ -812,11 +820,13 @@ class App(object):
         self.auto_update = False
 
         # canvas
-        self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.get_colors, diameter)
+        self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.get_colors)
 
     def get_colors(self):
-        # print(list(map(int, self.colors[self.cur_marker])))
-        return list(map(int, self.colors[self.cur_marker*3])), int(self.cur_marker)
+        pen_color = self.cur_marker*3
+        if pen_color > 255:
+            pen_color -= 255
+        return list(map(int, self.colors[pen_color])), int(self.cur_marker)
 
     def watershed(self):
 
@@ -827,7 +837,9 @@ class App(object):
         cv2.watershed(self.img, self.m)
 
         # transfer marker to color but remove negative marker
-        self.overlay = self.colors[np.maximum(self.m, 0)*2]
+        marker_map = np.maximum(self.m, 0) * 3
+        marker_map[marker_map > 255] -= 255
+        self.overlay = self.colors[marker_map]
 
         vis = cv2.addWeighted(self.img, 0.5, self.overlay, 0.5, 0.0, dtype=cv2.CV_8UC3)
         cv2.namedWindow('watershed', cv2.WINDOW_NORMAL)
@@ -854,7 +866,8 @@ class App(object):
                 print('marker: ', self.cur_marker)
 
             if ch in [ord('l'), ord('L')]:
-                self.cur_marker = self.cur_marker + 1
+                self.cur_marker = input("input marker:")
+                self.cur_marker = int(self.cur_marker)
                 print('marker: ', self.cur_marker)
 
             if ch in [ord('t'), ord('T')]:
@@ -917,15 +930,12 @@ class PrevNowMatching(object):
         # lost map
         self.lost_map = np.zeros((3072, 3072))
 
-        # plot input
-        self.show(self.prev_label_map, "prev_label_map")
-        self.show(self.now_label_map, "now_label_map")
-
     def run(self):
         self.check_prev_label()
         self.check_now_label()
         self.first_round_matching()
         self.second_round_matching()
+        self.clean_appear()
         return self.output
 
     def show(self, image, text):
@@ -951,6 +961,7 @@ class PrevNowMatching(object):
                 # print("label:", label, "has:", cur_label_num, "pixel")
 
     def first_round_matching(self):
+        """ centroid method """
         self.output = self.now_label_map.copy()
         iterative_label = self.prev_list.copy()
         # find prev label
@@ -958,18 +969,19 @@ class PrevNowMatching(object):
             # choose iterative label in box
             label = iterative_label[i]
 
-
             # find corresponding label in now
             black = np.zeros((3072, 3072))
             black[self.prev_label_map == label] = 255
             x, y = self.centroid(black)
             corresponded_label = self.now_label_map[y, x]
 
-            # black[self.now_label_map == corresponded_label] = 100
-            # plt.figure()
-            # plt.imshow(black, cmap='gray', vmax=255, vmin=0)
-            # plt.scatter(x, y, s=20, c="g")
-            # plt.show()
+
+            # if i == 33:
+            #     plt.figure()
+            #     plt.imshow(black, cmap='gray', vmax=255, vmin=0)
+            #     black[self.now_label_map == corresponded_label] = 100
+            #     plt.scatter(x, y, s=20, c="g")
+            #     plt.show()
 
             # print("prev label:", label, "match --> now label: ", corresponded_label)
 
@@ -991,6 +1003,7 @@ class PrevNowMatching(object):
                 print()
 
     def second_round_matching(self):
+        """ overlap method"""
         if self.prev_list and self.now_list:
             for disappear in self.prev_list:
                 for appear in self.now_list:
@@ -999,6 +1012,7 @@ class PrevNowMatching(object):
                         # find overlap
                         print("Round 2 : prev label:", disappear, "match --> now label: ", appear)
                         self.output[self.now_label_map == appear] = disappear
+
         # appear
         print("appear: ", self.now_list)
         if self.now_list:
@@ -1014,12 +1028,17 @@ class PrevNowMatching(object):
                 self.lost_map[self.prev_label_map == i] = 100
 
         print("finish second round!")
-        self.show(self.output, "new_now_map")
+        self.show(self.output, "new")
         plt.figure()
-        plt.imshow(self.lost_map, cmap='jet')
-        plt.figtext(0.83, 0.5, "g: disappear\nr: appear", transform=plt.gcf().transFigure)
+        plt.imshow(self.lost_map, cmap='jet', vmax=255, vmin=0)
+        plt.figtext(0.83, 0.5, "g: disappear\no: appear", transform=plt.gcf().transFigure)
         plt.title("lost_map")
         plt.show()
+
+    def clean_appear(self):
+        """clean appear cell"""
+        for label_appeared in self.now_list:
+            self.output[self.output == label_appeared] = 1
 
     def centroid(self, binary_image):
         """ find centroid"""
@@ -1042,14 +1061,16 @@ class PrevNowCombo(WorkFlow):
     def combo(self, now_target=-1, save=False):
         self.prev = np.load(self.afterwater_path + str(now_target-1) + "_afterwater.npy")
         self.now = np.load(self.afterwater_path + str(now_target) + "_afterwater.npy")
-        output = PrevNowMatching(self.prev, self.now).run()
+        match = PrevNowMatching(self.prev, self.now)
+        output = match.run()
+        # plot input
+        match.show(match.prev_label_map, str(now_target-1) + " prev_label_map")
+        match.show(match.now_label_map, str(now_target) + " now_label_map")
         if save:
             np.save(self.afterwater_path + str(now_target) + "_afterwater.npy", output)
 
 
 ###########################################################################################
-
-
 
 class AnalysisCellFeature(WorkFlow):
     def __init__(self, root):

@@ -20,7 +20,7 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 
 
 ####################################################################################
-current_target = 11
+current_target = 12
 after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load_old=True, save_water=True)
 plt.close()
 plt.figure()
@@ -31,8 +31,7 @@ plt.show()
 
 ####################################################################################
 
-# output = PrevNowCombo(root_path).combo(now_target=5, save=True)
-
+# output = PrevNowCombo(root_path).combo(now_target=6, save=True)
 ####################################################################################
 # test
 path = "E:\\DPM\\20190708\\Bead\\1\\SP\\time-lapse\\afterwater\\1_afterwater.npy"
