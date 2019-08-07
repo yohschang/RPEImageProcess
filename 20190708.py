@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 from btimage import check_file_exist
-from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov
+from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow
 import glob
 from matplotlib import pyplot as plt
 
@@ -19,8 +19,9 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 # f.run()
 
 
-####################################################################################
-current_target = 12
+###################################################################################
+
+current_target = 1
 after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load_old=True, save_water=True)
 plt.close()
 plt.figure()
@@ -28,10 +29,11 @@ plt.title(str(current_target) + "label img")
 plt.imshow(after, cmap='jet')
 plt.colorbar()
 plt.show()
-
 ####################################################################################
 
-# output = PrevNowCombo(root_path).combo(now_target=6, save=True)
+# output = PrevNowCombo(root_path).combo(now_target=10, save=True)
+
+# manual change the 44 , 40
 ####################################################################################
 # test
 path = "E:\\DPM\\20190708\\Bead\\1\\SP\\time-lapse\\afterwater\\1_afterwater.npy"

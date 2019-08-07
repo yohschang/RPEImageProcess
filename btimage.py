@@ -30,7 +30,6 @@ from matplotlib.colors import LinearSegmentedColormap
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
 from skimage.morphology import disk
-from skimage.filters.rank import enhance_contrast
 from skimage.exposure import adjust_sigmoid
 from random import randint
 import glob
@@ -595,10 +594,10 @@ class CellLabelOneImage(WorkFlow):
         plt.show()
 
     def phase2uint8(self):
-        plt.figure()
-        plt.title(str(self.target) + "original image")
-        plt.imshow(self.img, cmap='jet', vmax=3.5, vmin=-0.2)
-        plt.colorbar()
+        plt.figure(dpi=200, figsize=(10, 10))
+        plt.title(str(self.target) + " original image")
+        plt.imshow(self.img, cmap='jet', vmax=2.5, vmin=-0.2)
+        plt.axis("off")
         plt.show()
         self.img[self.img >= 4] = 0
         self.img[self.img <= -0.5] = -0.5
@@ -851,9 +850,7 @@ class App(object):
         # plt.show()
 
     def run(self):
-
         # init marker
-        decision = 1
         while True:
             ch = 0xFF & cv2.waitKey(50)
 
@@ -866,8 +863,11 @@ class App(object):
                 print('marker: ', self.cur_marker)
 
             if ch in [ord('l'), ord('L')]:
-                self.cur_marker = input("input marker:")
-                self.cur_marker = int(self.cur_marker)
+                input_label = input("input marker:")
+                if 0 <= int(input_label) <= 90:
+                    self.cur_marker = int(input_label)
+                else:
+                    print("invalid label!")
                 print('marker: ', self.cur_marker)
 
             if ch in [ord('t'), ord('T')]:
@@ -878,11 +878,6 @@ class App(object):
             if ch == ord(' ') or (self.sketch.dirty and self.auto_update):
                 self.watershed()
                 self.sketch.dirty = False
-
-            # # automatic update
-            # if ch in [ord('a'), ord('A')]:
-            #     self.auto_update = not self.auto_update
-            #     print('auto_update if', ['off', 'on'][self.auto_update])
 
             if ch in [ord('a'), ord('A')]:
                 for label in range(85):
@@ -1000,7 +995,6 @@ class PrevNowMatching(object):
 
             elif corresponded_label == 1:
                 print("prev label:", label, "match BG label !!!!!")
-                print()
 
     def second_round_matching(self):
         """ overlap method"""
@@ -1013,13 +1007,15 @@ class PrevNowMatching(object):
                         print("Round 2 : prev label:", disappear, "match --> now label: ", appear)
                         self.output[self.now_label_map == appear] = disappear
 
+                        # remove disappear and appear
+                        self.prev_list.remove(disappear)
+                        self.now_list.remove(appear)
+
         # appear
         print("appear: ", self.now_list)
         if self.now_list:
             for i in self.now_list:
                 self.lost_map[self.now_label_map == i] = 200
-                # if appear, then cancel their label
-                self.output[self.now_label_map == i] = 1
 
         # disappear
         print("disappear: ", self.prev_list)
@@ -1028,17 +1024,19 @@ class PrevNowMatching(object):
                 self.lost_map[self.prev_label_map == i] = 100
 
         print("finish second round!")
+
+    def clean_appear(self):
+        """clean appear cell"""
+        for label_appeared in self.now_list:
+            print("clean ", label_appeared, " ...")
+            self.output[self.now_label_map == label_appeared] = 1
+
         self.show(self.output, "new")
         plt.figure()
         plt.imshow(self.lost_map, cmap='jet', vmax=255, vmin=0)
         plt.figtext(0.83, 0.5, "g: disappear\no: appear", transform=plt.gcf().transFigure)
         plt.title("lost_map")
         plt.show()
-
-    def clean_appear(self):
-        """clean appear cell"""
-        for label_appeared in self.now_list:
-            self.output[self.output == label_appeared] = 1
 
     def centroid(self, binary_image):
         """ find centroid"""
@@ -1059,7 +1057,9 @@ class PrevNowCombo(WorkFlow):
         self.now = None
 
     def combo(self, now_target=-1, save=False):
+        print("load ", str(now_target-1) + "_afterwater.npy")
         self.prev = np.load(self.afterwater_path + str(now_target-1) + "_afterwater.npy")
+        print("load ", str(now_target) + "_afterwater.npy")
         self.now = np.load(self.afterwater_path + str(now_target) + "_afterwater.npy")
         match = PrevNowMatching(self.prev, self.now)
         output = match.run()
@@ -1067,7 +1067,11 @@ class PrevNowCombo(WorkFlow):
         match.show(match.prev_label_map, str(now_target-1) + " prev_label_map")
         match.show(match.now_label_map, str(now_target) + " now_label_map")
         if save:
-            np.save(self.afterwater_path + str(now_target) + "_afterwater.npy", output)
+            if match.prev_list:
+                print("Cannot save it ! disappear !!")
+            else:
+                print("revise ", str(now_target) + "_afterwater.npy")
+                np.save(self.afterwater_path + str(now_target) + "_afterwater.npy", output)
 
 
 ###########################################################################################
