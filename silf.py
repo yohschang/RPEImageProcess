@@ -26,8 +26,9 @@ mask2.opennpy()
 
 #######################
 
-cell1 = im1.img
-cell2 = im2.img
+cell1 = im1.img.copy()
+cell1[mask1.img != 66] = 0
+cell2 = im2.img.copy()
 
 fig, axe = plt.subplots(nrows=1, ncols=2, figsize=(12, 6))
 axe[0].imshow(cell1, cmap="gray")
@@ -40,7 +41,7 @@ fig.show()
 
 
 # feature extraction
-sift_whole = cv2.xfeatures2d.SIFT_create(10000)
+sift_whole = cv2.xfeatures2d.SIFT_create()
 keypoint1, descriptor1 = sift_whole.detectAndCompute(cell1, None)
 keypoint2, descriptor2 = sift_whole.detectAndCompute(cell2, None)
 # img1 = cv2.drawKeypoints(cell1, keypoint1, cell1, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
@@ -56,7 +57,7 @@ print(len(rawMatches))
 matches = []
 table = []
 for m in rawMatches:
-    if len(m) == 2 and m[0].distance < m[1].distance * 0.65:
+    if len(m) == 2 and m[0].distance < m[1].distance * 0.9:
         table.append((m[0].trainIdx, m[0].queryIdx))
         matches.append(m[0])
 print(len(matches))

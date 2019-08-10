@@ -294,6 +294,7 @@ class PhaseRetrieval(object):
         self.final_sp = None
         self.final_bg = None
         self.final = None
+        self.image_size = 3072
 
     def phase_retrieval(self, m_factor, strategy="try", sp=(0, 0)):
         # open img
@@ -338,8 +339,8 @@ class PhaseRetrieval(object):
         self.unwarpped_bg += np.pi * self.shift(bg_mean)
 
         # resize
-        self.final_sp = self.resize_image(self.unwarpped_sp, 3072)
-        self.final_bg = self.resize_image(self.unwarpped_bg, 3072)
+        self.final_sp = self.resize_image(self.unwarpped_sp, self.image_size)
+        self.final_bg = self.resize_image(self.unwarpped_bg, self.image_size)
 
         # subtract
         self.final = self.final_sp - self.final_bg
@@ -557,7 +558,7 @@ class CellLabelOneImage(WorkFlow):
         self.after_water = None
         self.plot_mode = False
 
-    def run(self, adjust=False, plot_mode=False, load_old=False, save_water=False):
+    def run(self, adjust=False, plot_mode=False, load="no", save_water=False):
         self.plot_mode = plot_mode
         self.phase2uint8()
         self.smoothing()
@@ -570,12 +571,41 @@ class CellLabelOneImage(WorkFlow):
         self.watershed_algorithm()
 
         if adjust:
-            if load_old:
-                marker_file = self.marker_path + str(self.target) + "_marker.npy"
-                check_file_exist(marker_file, str(self.target) + "_marker.npy")
-            else:
+            if load == "old":
+                try:
+                    # load saved marker
+                    print("load saved marker", str(self.target) + "_marker.npy")
+                    marker_file = self.marker_path + str(self.target) + "_marker.npy"
+                    check_file_exist(marker_file, str(self.target) + "_marker.npy")
+                except OSError:
+                    # load previous marker
+                    print("load previous marker", str(self.target-1) + "_marker.npy")
+                    marker_file = self.marker_path + str(self.target-1) + "_marker.npy"
+                    check_file_exist(marker_file, str(self.target-1) + "_marker.npy")
+
+                try:
+                    # load previous afterwater
+                    print("load previous afterwater", str(self.target-1) + "_afterwater.npy")
+                    afterwater_file = self.afterwater_path + str(self.target-1) + "_afterwater.npy"
+                    check_file_exist(afterwater_file, str(self.target-1) + "_afterwater.npy")
+                except OSError:
+                    raise Exception("Must use previous afterwater!")
+
+            elif load == "first":
+                try:
+                    marker_file = self.marker_path + str(self.target) + "_marker.npy"
+                    check_file_exist(marker_file, str(self.target) + "_marker.npy")
+                except OSError:
+                    print("No ", str(self.target) + "_marker.npy")
+                    marker_file = None
+                afterwater_file = None
+
+            elif load == "no":
                 marker_file = None
-            self.watershed_manually(marker_file)
+                afterwater_file = None
+            else:
+                raise Exception("invalid argument of load: " + load)
+            self.watershed_manually(marker_file, afterwater_file)
 
         if save_water:
             np.save(self.afterwater_path + str(self.target) + "_afterwater.npy", self.after_water)
@@ -723,7 +753,7 @@ class CellLabelOneImage(WorkFlow):
         # if no manually adjust, self.after_water is final output #
         ###########################################################
 
-    def watershed_manually(self, marker_file=None):
+    def watershed_manually(self, marker_file=None, afterwater_file=None):
         """Implement App"""
         self.img_origin = cv2.cvtColor(self.img_origin, cv2.COLOR_GRAY2BGR)
         self.distance_img = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
@@ -735,7 +765,15 @@ class CellLabelOneImage(WorkFlow):
             except:
                 raise FileExistsError("cannot open marker file")
 
-        r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.marker_path, cur_img_num=self.target)
+        if afterwater_file:
+            try:
+                afterwater = np.load(afterwater_file)
+            except:
+                raise FileExistsError("cannot open afterwater file")
+        else:
+            afterwater = np.zeros((3072, 3072), dtype=np.uint8)
+
+        r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.marker_path, cur_img_num=self.target, afterwater=afterwater)
         r.run()
         self.after_water = r.m
 
@@ -766,10 +804,10 @@ class Sketcher(object):
 
         if event == cv2.EVENT_RBUTTONDOWN:
             if self.diameter == 20:
-                print("large diameter!!")
+                print("large diameter ^^ ")
                 self.diameter = 50
             else:
-                print("small diameter")
+                print("small diameter :( ")
                 self.diameter = 20
 
         # draw a line
@@ -792,18 +830,19 @@ class App(object):
             =========
             Keys
             ----
-              1-7   - switch marker color
               SPACE - update segmentation
               r     - reset
-              a     - toggle autoupdate
               ESC   - exit
 
         """
-    def __init__(self, fn, existed_marker, show_img, save_path, cur_img_num):
+    def __init__(self, fn, existed_marker, show_img, save_path, cur_img_num, afterwater):
         # input parameter
         self.img = fn
         self.markers = existed_marker
-        self.show_img = show_img
+        # sketcher image
+        jet_afterwater = cv2.applyColorMap(afterwater.astype(np.uint8) * 3, cv2.COLORMAP_JET)
+        self.show_img = cv2.addWeighted(show_img, 0.5, jet_afterwater, 0.5, 0.0, dtype=cv2.CV_8UC3)
+        # self.show_img = show_img
         self.save_path = save_path
         self.cur_img_num = cur_img_num
 
@@ -871,8 +910,11 @@ class App(object):
                 print('marker: ', self.cur_marker)
 
             if ch in [ord('t'), ord('T')]:
-                self.markers[self.markers == self.cur_marker] = 0
-                print('reset: ', self.cur_marker, " in the image")
+                if self.cur_marker == 1 or self.cur_marker == 0:
+                    print("Cannot delete background label or unknown label!")
+                else:
+                    self.markers[self.markers == self.cur_marker] = 0
+                    print('reset: ', self.cur_marker, " in the image")
 
             # update watershed
             if ch == ord(' ') or (self.sketch.dirty and self.auto_update):
@@ -917,7 +959,9 @@ class PrevNowMatching(object):
     """ creare the list of linkage"""
     def __init__(self, prev, now):
         self.prev_label_map = prev
+        self.prev_label_map[self.prev_label_map == -1] = 1
         self.now_label_map = now
+        self.now_label_map[self.now_label_map == -1] = 1
         self.prev_list = []
         self.now_list = []
         self.output = None
@@ -934,9 +978,17 @@ class PrevNowMatching(object):
         return self.output
 
     def show(self, image, text):
-        plt.figure()
+        plt.figure(figsize=(8, 8))
         plt.imshow(image, cmap='jet', vmax=90, vmin=0)
+        for i in range(2, 90):
+            if len(image[image == i]) != 0:
+                image_tem = np.zeros((3072, 3072), dtype=np.uint8)
+                image_tem[image == i] = 255
+                x, y = self.centroid(image_tem)
+                plt.scatter(x, y, s=5, c='g')
+                plt.text(x, y, str(i))
         plt.title(text)
+        plt.axis("off")
         plt.show()
 
     def check_prev_label(self):
@@ -983,24 +1035,34 @@ class PrevNowMatching(object):
             if corresponded_label != 1:
                 # registering corresponding label into new_now_map
                 self.output[self.now_label_map == corresponded_label] = label
+
                 # pop corresponded_label
                 try:
                     self.prev_list.remove(label)
-                except:
-                    pass
+                except Exception as e:
+                    print(str(e))
+                    print("Cannot remove ", label, " from disappear list")
+
                 try:
                     self.now_list.remove(corresponded_label)
-                except:
-                    pass
+                except Exception as e:
+                    print(str(e))
+                    print("Cannot remove ", corresponded_label, " from appear list")
 
             elif corresponded_label == 1:
                 print("prev label:", label, "match BG label !!!!!")
 
+            else:
+                print("prev label:", label, "match ", corresponded_label, "what?!")
+
     def second_round_matching(self):
         """ overlap method"""
-        if self.prev_list and self.now_list:
-            for disappear in self.prev_list:
-                for appear in self.now_list:
+        disappear_list = self.prev_list.copy()
+        appear_list = self.now_list.copy()
+
+        if appear_list and disappear_list:
+            for disappear in disappear_list:
+                for appear in appear_list:
                     black = np.zeros((3072, 3072))
                     if len(black[(self.prev_label_map == disappear) & (self.now_label_map == appear)]) != 0:
                         # find overlap
@@ -1028,7 +1090,6 @@ class PrevNowMatching(object):
     def clean_appear(self):
         """clean appear cell"""
         for label_appeared in self.now_list:
-            print("clean ", label_appeared, " ...")
             self.output[self.now_label_map == label_appeared] = 1
 
         self.show(self.output, "new")

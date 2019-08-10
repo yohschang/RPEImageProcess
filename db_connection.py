@@ -38,6 +38,7 @@ class RetinalPigmentEpithelium(Base):
         self.time_lapse_num = time_lapse_num
         self.img_path = path
 
+        # features
         self.phase_mean = 0.0
         self.phase_std = 0.0
         self.circularity = 0.0

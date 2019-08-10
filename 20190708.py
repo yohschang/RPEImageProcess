@@ -20,20 +20,23 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 
 
 ###################################################################################
+# label and match
 
-current_target = 1
-after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load_old=True, save_water=True)
-plt.close()
-plt.figure()
-plt.title(str(current_target) + "label img")
-plt.imshow(after, cmap='jet')
-plt.colorbar()
-plt.show()
-####################################################################################
+# current_target = 30
 
-# output = PrevNowCombo(root_path).combo(now_target=10, save=True)
+# after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="old", save_water=True)
+# output = PrevNowCombo(root_path).combo(now_target=current_target, save=True)
 
-# manual change the 44 , 40
+# plt.close()
+# plt.figure()
+# plt.title(str(current_target) + "label img")
+# plt.imshow(after, cmap='jet')
+# plt.colorbar()
+# plt.show()
+# ####################################################################################
+
+
+
 ####################################################################################
 # test
 path = "E:\\DPM\\20190708\\Bead\\1\\SP\\time-lapse\\afterwater\\1_afterwater.npy"
