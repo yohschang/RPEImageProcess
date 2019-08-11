@@ -22,7 +22,7 @@ function:
 """
 
 import cv2
-from os import makedirs
+from os import makedirs, listdir
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -316,7 +316,7 @@ class PhaseRetrieval(object):
 
         # crop real or virtual image
         self.sp.crop_first_order(x, y, 768)
-        self.bg.crop_first_order(0, 0, 768)
+        self.bg.crop_first_order(0, 1, 768)
         print(x, y)
 
         # iFFT
@@ -460,7 +460,7 @@ class TimeLapseCombo(WorkFlow):
                     pr.phase_retrieval(m, sp=(0, 0), strategy=strategy)
                     print(str(i), " SD:", np.std(pr.final))
                     if np.std(pr.final) > 1.51:
-                        pr.phase_retrieval(m, sp=(0, 4), strategy=strategy)
+                        pr.phase_retrieval(m, sp=(0, 1), strategy=strategy)
                     pr.plot_final(center=False, num=i)
                     # pr.plot_hist()
                     if save:
@@ -476,10 +476,12 @@ class TimeLapseCombo(WorkFlow):
                     pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                     pr.phase_retrieval(m_factor, sp=(0, 0))
                     if np.std(pr.final) > 1:
-                        pr.phase_retrieval(m_factor, sp=(0, 0), strategy=strategy)
+                        pr.phase_retrieval(m_factor, sp=(0, 1), strategy=strategy)
                     pr.plot_final(center=False, num=i)
                     pr.plot_hist()
                     pr.plot_sp_bg()
+                    pr.plot_fdomain()
+
                     print(np.std(pr.final))
                     # pr.plot_fdomain()
                     if save:
@@ -1141,30 +1143,93 @@ class AnalysisCellFeature(WorkFlow):
     def __init__(self, root):
         super().__init__(root)
 
-        # find 40 frames in afterwater_path
-        # self.afterwater_path
+        # find
+        image_num = len(listdir(self.phase_npy_path))
+        print("Found ", image_num, " phase images~")
+        label_num = len(listdir(self.afterwater_path))
+        print("Found ", label_num, " label images~")
 
-        # find phase image in phase npy
-        # self.phase_npy_path
+        # find path
+        self.phase_img_list = []
+        self.label_img_list = []
+        for i in range(np.amin([image_num, label_num])):
+            self.phase_img_list.append(self.phase_npy_path + str(i+1) + "_phase.npy")
+            self.label_img_list.append(self.afterwater_path + str(i+1) + "_afterwater.npy")
 
-        # check the length of phase and label is 40
+        self.analysis_label = []
 
-        self.phase_img_list = None
-        self.label_img_list = None
+    def image_by_image(self):
+        for i in range(len(self.phase_img_list)):
+            print("image ", str(i+1))
+            self.one_by_one(i, plot_mode=False)
 
-    def one_by_one(self):
-        pass
-        # for each label of the first frame
+    def one_by_one(self, i, plot_mode=False):
 
-        # calculate phase mean
+        # load phase img and label img
+        phase_img = np.load(self.phase_img_list[i])
+        label_img = np.load(self.label_img_list[i])
 
-        # calculate area
+        # specify those label we want to analyze
+        if i == 0:
+            self.label_analyzed(label_img)
 
-        # calculate circularity
+        # for each label
+        for label in self.analysis_label:
 
-        # calculate distribution
+            # crop the cell
+            phase_copy = phase_img.copy()
+            phase_copy[label_img != label] = 0
+            a = phase_copy[label_img == label]
 
-        # create cell object
+            binary = phase_img.copy()
+            binary[label_img == label] = 255
+            binary[label_img != label] = 0
+
+            # mean
+            phase_mean = round(float(np.mean(a)), 3)
+            # std
+            phase_std = round(float(np.std(a)), 3)
+            # area, circularity
+            binary, contours, hierarchy = cv2.findContours(binary.astype(np.uint8),
+                                                           cv2.RETR_TREE,
+                                                           cv2.CHAIN_APPROX_SIMPLE)
+
+            if len(contours) != 1:
+                area_list = [cv2.contourArea(contours[idx]) for idx in range(len(contours))]
+                max_contour_idx = np.argmax(area_list)
+                object_contours = contours[max_contour_idx]
+            else:
+                object_contours = contours[0]
+            epsilon = 0.005 * cv2.arcLength(object_contours, True)
+            approx_contour = cv2.approxPolyDP(object_contours, epsilon, True)
+
+            perimeter = cv2.arcLength(approx_contour, True)
+            area = cv2.contourArea(approx_contour)
+
+            circularity = round(4 * np.pi * area / perimeter ** 2, 3)
+
+            print("mean: ", phase_mean, "std", phase_std, "area: ", area, "circularity", circularity)
+
+            if plot_mode:
+                rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+                rgb = cv2.drawContours(rgb, approx_contour, -1, (255, 0, 0), 5)
+
+                plt.figure()
+                plt.imshow(rgb)
+                plt.show()
+
+                plt.figure()
+                plt.imshow(phase_copy, cmap='jet', vmax=3.5, vmin=-0.2)
+                plt.show()
+
+                plt.figure()
+                plt.imshow(label_img, cmap='jet')
+                plt.show()
+
+    def label_analyzed(self, label_img):
+        for label in range(90):
+            if len(label_img[label_img == label]) > 0:
+                self.analysis_label.append(label)
 
     def connect_to_db(self):
         # use db to store the feature, crop phase image
@@ -1173,23 +1238,6 @@ class AnalysisCellFeature(WorkFlow):
     def plot_the_graph(self):
         # take the data and plot it in different plot
         pass
-
-
-class Cell(object):
-    def __init__(self):
-        """RPE cell"""
-        # basic attribute
-        self.id = -1
-        self.disappear = False
-        self.disappear_frame = -1
-
-        # label
-        self.full_attendance = False
-
-        # list of feature
-        self.cell_area = []
-        self.circularity = []
-        self.cell_phase_mean = []
 
 
 class Fov(WorkFlow):

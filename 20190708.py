@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 from btimage import check_file_exist
-from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow
+from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow, AnalysisCellFeature
 import glob
 from matplotlib import pyplot as plt
 
@@ -34,7 +34,9 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 # plt.colorbar()
 # plt.show()
 # ####################################################################################
+# analysis
 
+ana = AnalysisCellFeature(root_path)
 
 
 ####################################################################################
