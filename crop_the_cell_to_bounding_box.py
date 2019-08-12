@@ -39,8 +39,8 @@ for label in range(5, 85):
         crop_img_label = label_cur_im[y:y + h, x:x + w]
         crop_img_phase = phase_cur_im[y:y + h, x:x + w]
 
-        max_v = crop_img_phase.max()
-        min_v = crop_img_phase.min()
+        # max_v = crop_img_phase.max()
+        # min_v = crop_img_phase.min()
 
 
 

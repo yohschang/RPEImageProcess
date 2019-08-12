@@ -26,13 +26,12 @@ class RetinalPigmentEpithelium(Base):
     area = Column('area', Float)
     apoptosis = Column("apoptosis", Boolean)
     mean_optical_height = Column("mean_optical_height", Float)
-
-
+    distance_coef = Column("distance_coef", Float)
 
     img_path = Column('img_path', String(150))
     label_path = Column("label_path", String(150))
 
-    def __init__(self, id, year, month, day, label, time_lapse_num, img_path, label_path):
+    def __init__(self, id, year, month, day, label, time_lapse_num, img_path, label_path, features):
         self.id = id
         self.year = year
         self.month = month
@@ -47,7 +46,9 @@ class RetinalPigmentEpithelium(Base):
         self.phase_std = 0.0
         self.circularity = 0.0
         self.area = 0.0
-        self.apoptosis = 0
+        self.apoptosis = False
+        self.mean_optical_height = 0.0
+        self.distance_coef = 0.0
 
     def __repr__(self):
         repr_str1 = "<RetinalPigmentEpithelium("

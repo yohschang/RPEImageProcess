@@ -1170,7 +1170,7 @@ class AnalysisCellFeature(WorkFlow):
         self.sess = None
         self.current_id = 0
         self.date = (2019, 7, 8)
-        self.connect_to_db()
+        # self.connect_to_db()
 
     def image_by_image(self):
         for i in range(len(self.phase_img_list)):
@@ -1195,16 +1195,19 @@ class AnalysisCellFeature(WorkFlow):
             phase_copy[label_img != label] = 0
             a = phase_copy[label_img == label]
 
+            # binarization
             binary = phase_img.copy()
             binary[label_img == label] = 255
             binary[label_img != label] = 0
+            binary = binary.astype(np.uint8)
+            x, y, w, h = cv2.boundingRect(binary)
 
             # mean
             phase_mean = round(float(np.mean(a)), 3)
             # std
             phase_std = round(float(np.std(a)), 3)
             # area, circularity
-            binary, contours, hierarchy = cv2.findContours(binary.astype(np.uint8),
+            binary, contours, hierarchy = cv2.findContours(binary,
                                                            cv2.RETR_TREE,
                                                            cv2.CHAIN_APPROX_SIMPLE)
 
@@ -1219,10 +1222,23 @@ class AnalysisCellFeature(WorkFlow):
 
             perimeter = cv2.arcLength(approx_contour, True)
             area = cv2.contourArea(approx_contour)
-
             circularity = round(4 * np.pi * area / perimeter ** 2, 3)
 
-            print("mean: ", phase_mean, "std", phase_std, "area: ", area, "circularity", circularity)
+            # mean optical height
+            height = round(0.532 * phase_mean / 2 / np.pi / (1.37 - 1.33), 3)
+
+            # crop image
+            crop_binary = binary[y:y + h, x:x + w]
+            crop_phase = phase_copy[y:y + h, x:x + w]
+            crop_phase = 255 * (crop_phase + 0.2) / (3.5 + 0.2)
+            crop_phase = crop_phase.astype(np.uint8)
+
+            # distance coef
+            dis = cv2.distanceTransform(crop_binary, cv2.DIST_L2, 5)
+            res = cv2.matchTemplate(crop_phase, dis.astype(np.uint8), cv2.TM_CCOEFF_NORMED)
+            distance_coef = res.max()
+
+            print("mean: ", phase_mean, "std", phase_std, "area: ", area, "circularity: ", circularity, "height: ", height, "dis_coef: ", distance_coef)
 
             if plot_mode:
                 rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
@@ -1233,33 +1249,40 @@ class AnalysisCellFeature(WorkFlow):
                 plt.show()
 
                 plt.figure()
-                plt.imshow(phase_copy, cmap='jet', vmax=3.5, vmin=-0.2)
+                plt.imshow(crop_binary, cmap="gray")
                 plt.show()
 
                 plt.figure()
-                plt.imshow(label_img, cmap='jet')
+                plt.title("uint8")
+                plt.imshow(crop_phase, cmap="jet", vmax=255, vmin=0)
+                plt.show()
+
+                plt.figure()
+                plt.imshow(dis.astype(np.uint8))
                 plt.show()
 
             if self.dbsave:
                 self.check_last_id()
 
-
-
     def label_analyzed(self, label_img):
-        for label in range(90):
+        for label in range(2, 90):
             if len(label_img[label_img == label]) > 0:
                 self.analysis_label.append(label)
 
     def connect_to_db(self):
-        """ MYSQL"""
+        """ MYSQL """
         passward = getenv("DBPASS")
         engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
         Session = sessionmaker(bind=engine, autoflush=False)
         self.sess = Session()
+        print("Connect...")
 
     def check_last_id(self):
         obj = self.sess.query(RetinalPigmentEpithelium).order_by(RetinalPigmentEpithelium.id.desc()).first()
+        if obj is None:
+            self.current_id = 0
         self.current_id = obj.id
+        print("current id: ", self.current_id)
 
     def update_to_db(self):
         pass
