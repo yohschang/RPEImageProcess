@@ -10,10 +10,14 @@ from matplotlib import pyplot as plt
 root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 
 ####################################################################################
-# t = TimeLapseCombo(root_path=root_path)
-# t.read(1, 36)
-# t.combo(target=26, save=True, m_factor=0.5, strategy="cheat")
 
+
+def test():
+    t = TimeLapseCombo(root_path=root_path)
+    t.read(1, 36)
+    t.combo(target=26, save=True, m_factor=0.5, strategy="cheat")
+
+test()
 ####################################################################################
 # f = Fov(root_path, 1, 36)
 # f.run()
@@ -36,7 +40,7 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 # ####################################################################################
 # analysis
 
-ana = AnalysisCellFeature(root_path)
+# ana = AnalysisCellFeature(root_path)
 
 
 ####################################################################################

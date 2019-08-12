@@ -25,6 +25,9 @@ class RetinalPigmentEpithelium(Base):
     circularity = Column('circularity', Float)
     area = Column('area', Float)
     apoptosis = Column("apoptosis", Boolean)
+    mean_optical_height = Column("mean_optical_height", Float)
+
+
 
     img_path = Column('img_path', String(150))
     label_path = Column("label_path", String(150))

@@ -22,7 +22,7 @@ function:
 """
 
 import cv2
-from os import makedirs, listdir
+from os import makedirs, listdir, getenv
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -34,6 +34,10 @@ from skimage.exposure import adjust_sigmoid
 from random import randint
 import glob
 import tqdm
+from sqlalchemy import create_engine, or_
+from sqlalchemy.orm import sessionmaker
+from databaseORM import RetinalPigmentEpithelium
+
 
 # green colorbar
 cdict1 = {'red': ((0.0, 0.0, 0.0),
@@ -121,6 +125,9 @@ class BT_image(object):
 
     def open_image(self, color="g"):
         img = cv2.imread(self.path)
+        if img is None:
+            raise FileNotFoundError("Cannot open this image!")
+
         if color == "g":
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         self.img = img
@@ -444,7 +451,7 @@ class TimeLapseCombo(WorkFlow):
 
             # read many SP
             path_cur = self.root + str(i) + "\\"
-            check_file_exist(path_cur, "i")
+            check_file_exist(path_cur, i)
             found_file = glob.glob(path_cur + "*.bmp")
             if len(found_file) != 1:
                 raise FileExistsError("SP lost or too many SP")
@@ -1158,6 +1165,13 @@ class AnalysisCellFeature(WorkFlow):
 
         self.analysis_label = []
 
+        # database
+        self.dbsave = False
+        self.sess = None
+        self.current_id = 0
+        self.date = (2019, 7, 8)
+        self.connect_to_db()
+
     def image_by_image(self):
         for i in range(len(self.phase_img_list)):
             print("image ", str(i+1))
@@ -1226,13 +1240,28 @@ class AnalysisCellFeature(WorkFlow):
                 plt.imshow(label_img, cmap='jet')
                 plt.show()
 
+            if self.dbsave:
+                self.check_last_id()
+
+
+
     def label_analyzed(self, label_img):
         for label in range(90):
             if len(label_img[label_img == label]) > 0:
                 self.analysis_label.append(label)
 
     def connect_to_db(self):
-        # use db to store the feature, crop phase image
+        """ MYSQL"""
+        passward = getenv("DBPASS")
+        engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
+        Session = sessionmaker(bind=engine, autoflush=False)
+        self.sess = Session()
+
+    def check_last_id(self):
+        obj = self.sess.query(RetinalPigmentEpithelium).order_by(RetinalPigmentEpithelium.id.desc()).first()
+        self.current_id = obj.id
+
+    def update_to_db(self):
         pass
 
     def plot_the_graph(self):

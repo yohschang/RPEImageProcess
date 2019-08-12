@@ -12,7 +12,9 @@ label_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\afterw
 
 # cell_test = RetinalPigmentEpithelium(0, 2019, 8, 10, 0, 0, image_path, label_path)
 # sess.add(cell_test)
-a = sess.query(RetinalPigmentEpithelium).all()
+# a = sess.query(RetinalPigmentEpithelium).all()
+
+a = sess.query(RetinalPigmentEpithelium).order_by(RetinalPigmentEpithelium.id.desc()).first()
 
 sess.commit()
 engine.dispose()
