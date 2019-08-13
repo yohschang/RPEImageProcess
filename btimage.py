@@ -420,10 +420,10 @@ class TimeLapseCombo(WorkFlow):
             for i, m in zip(range(len(self.pathsp_list)), np.arange(0.3, 0, -0.3/40)):
                 pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                 try:
-                    pr.phase_retrieval(m, sp=(0, 0), strategy=strategy)
+                    pr.phase_retrieval(sp=(0, 0), strategy=strategy)
                     print(str(i), " SD:", np.std(pr.final))
                     if np.std(pr.final) > 1.51:
-                        pr.phase_retrieval(m, sp=(0, 1), strategy=strategy)
+                        pr.phase_retrieval(sp=(0, 1), strategy=strategy)
                     pr.plot_final(center=False, num=i)
                     # pr.plot_hist()
                     if save:
@@ -437,9 +437,9 @@ class TimeLapseCombo(WorkFlow):
             for i in tqdm.trange(len(self.pathsp_list)):
                 if i == target:
                     pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
-                    pr.phase_retrieval(m_factor, sp=(0, 0))
+                    pr.phase_retrieval(sp=(1, -3))
                     if np.std(pr.final) > 1:
-                        pr.phase_retrieval(m_factor, sp=(0, 1), strategy=strategy)
+                        pr.phase_retrieval(sp=(1, -4), strategy=strategy)
                     pr.plot_final(center=False, num=i)
                     pr.plot_hist()
                     pr.plot_sp_bg()
@@ -1123,24 +1123,28 @@ class AnalysisCellFeature(WorkFlow):
 
         # database
         self.dbsave = False
+        self.pngsave = False
+        self.plot_mode = False
         self.sess = None
         self.engine = None
         self.current_id = 0
         self.date = (2019, 7, 8)
         self.connect_to_db()
 
-    def image_by_image(self, dbsave=False):
-        self.dbsave = dbsave
+    def image_by_image(self, db_save=False, png_save=False, plot_mode=False):
+        self.dbsave = db_save
+        self.pngsave = png_save
+        self.plot_mode = plot_mode
         # find id
         self.check_last_id()
         for i in tqdm.trange(len(self.phase_img_list)):
             print("image ", str(i+1))
             # an image
-            self.one_by_one(i, plot_mode=False)
+            self.one_by_one(i)
         if self.dbsave:
             self.db_commit()
 
-    def one_by_one(self, i, plot_mode=False):
+    def one_by_one(self, i):
 
         # load phase img and label img
         phase_img = np.load(self.phase_img_list[i])
@@ -1193,6 +1197,8 @@ class AnalysisCellFeature(WorkFlow):
             # crop image
             crop_binary = binary[y:y + h, x:x + w]
             crop_phase = phase_copy[y:y + h, x:x + w]
+            crop_phase[crop_phase >= MAXPHASE] = MAXPHASE
+            crop_phase[crop_phase <= MINPHASE] = MINPHASE
             crop_phase = 255 * (crop_phase - MINPHASE) / (MAXPHASE - MINPHASE)
             crop_phase = crop_phase.astype(np.uint8)
 
@@ -1207,7 +1213,7 @@ class AnalysisCellFeature(WorkFlow):
             print("mean: ", phase_mean, "std", phase_std, "area: ", area, "circularity: ", circularity, "height: ", height, "dis_coef: ", distance_coef)
             features = [phase_mean, phase_std, circularity, area, apoptosis, height, distance_coef]
 
-            if plot_mode:
+            if self.plot_mode:
                 rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
                 rgb = cv2.drawContours(rgb, approx_contour, -1, (255, 0, 0), 5)
 
@@ -1221,16 +1227,22 @@ class AnalysisCellFeature(WorkFlow):
 
                 plt.figure()
                 plt.title("uint8")
-                plt.imshow(crop_phase, cmap="jet", vmax=255, vmin=0)
+                plt.imshow(crop_phase, cmap="gray", vmax=255, vmin=0)
                 plt.show()
 
                 plt.figure()
                 plt.imshow(dis.astype(np.uint8))
                 plt.show()
 
+            if self.pngsave:
+                cv2.imwrite(self.kaggle_img_path + str(self.current_id+1) + "_img.png", crop_phase)
+                cv2.imwrite(self.kaggle_mask_path + str(self.current_id+1) + "_mask.png", crop_binary)
+
             if self.dbsave:
                 # add a row
-                self.update_to_db(label=label, time=i+1, features=features)
+                im_path = self.kaggle_img_path + str(self.current_id+1) + "_img.png"
+                label_path = self.kaggle_mask_path + str(self.current_id+1) + "_mask.png"
+                self.update_to_db(label=label, time=i+1, features=features, im_path=im_path, label_path=label_path)
                 self.current_id += 1
 
     def label_analyzed(self, label_img):
@@ -1255,16 +1267,16 @@ class AnalysisCellFeature(WorkFlow):
             self.current_id = obj.id
         print("current id: ", self.current_id)
 
-    def update_to_db(self, label, time, features):
+    def update_to_db(self, label, time, features, im_path, label_path):
         id = self.current_id + 1
         year, month, day = self.date
-        img_path = ""
-        label_path = ""
 
         # check
         assert type(id) is int
         assert (type(year) is int) and (type(month) is int) and (type(day) is int)
         assert (type(label) is int) and (type(time) is int)
+        assert len(im_path) < 150
+        assert len(label_path) < 150
         assert type(features[0]) is float
         assert type(features[1]) is float
         assert type(features[2]) is float
@@ -1273,16 +1285,14 @@ class AnalysisCellFeature(WorkFlow):
         assert type(features[5]) is float
         assert type(features[6]) is float
 
-        tem = RetinalPigmentEpithelium(id, year, month, day, label, time, img_path, label_path, features)
+        # a row as a object
+        tem = RetinalPigmentEpithelium(id, year, month, day, label, time, im_path, label_path, features)
+        # add
         self.sess.add(tem)
 
     def db_commit(self):
         self.sess.commit()
         self.engine.dispose()
-
-    def plot_the_graph(self):
-        # take the data and plot it in different plot
-        pass
 
 
 class Fov(WorkFlow):
