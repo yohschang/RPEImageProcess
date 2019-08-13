@@ -15,7 +15,7 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 def test():
     t = TimeLapseCombo(root_path=root_path)
     t.read(1, 36)
-    t.combo(target=26, save=True, m_factor=0.5, strategy="cheat")
+    t.combo(target=26, save=True, strategy="cheat")
 
 test()
 ####################################################################################

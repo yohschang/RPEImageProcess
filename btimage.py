@@ -26,7 +26,6 @@ from os import makedirs, listdir, getenv
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-from colorbarforAPP import *
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
 from skimage.morphology import disk
@@ -36,7 +35,12 @@ import glob
 import tqdm
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
+
 from databaseORM import RetinalPigmentEpithelium
+from colorbarforAPP import *
+from ConfigRPE import *
+
+
 
 
 def round_all_the_entries_ndarray(matrix, decimal):
@@ -54,7 +58,7 @@ def check_file_exist(this_path, text):
 
 def check_img_size(image):
     try:
-        if image.shape[0] != 3072:
+        if image.shape[0] != IMAGESIZE:
             raise AssertionError("Image size is not 3072!")
     except:
         raise TypeError("This file is not ndarray!")
@@ -93,16 +97,16 @@ class BT_image(object):
 
     def open_raw_image(self):
         fd = open(self.path, 'rb')
-        rows = 3072
-        cols = 3072
+        rows = IMAGESIZE
+        cols = IMAGESIZE
         f = np.fromfile(fd, dtype=np.float32, count=rows * cols)
         im_real = f.reshape((rows, cols))
         fd.close()
         self.img = im_real
 
     def phase2int8(self):
-        self.img[self.img >= 3.5] = 0
-        self.img[self.img <= -0.2] = -0.5
+        self.img[self.img >= MAXPHASE] = MAXPHASE
+        self.img[self.img <= MINPHASE] = MINPHASE
         max_value = self.img.max()
         min_value = self.img.min()
         image_rescale = (self.img - min_value) * 255 / (max_value - min_value)
@@ -196,13 +200,13 @@ class BT_image(object):
 
     def crop_first_order(self, sx, sy, size):
 
-        x_start = 1536 - size//2
+        x_start = IMAGESIZE//2 - size//2
         y_start = 0
         width = size
         height = size
 
         # find the approximate area to crop
-        tem_crop = 20 * np.log(self.f_domain[0:0 + 768, (1536 - 384):(1536 - 384) + 768])
+        tem_crop = 20 * np.log(self.f_domain[0:0 + IMAGESIZE//4, (IMAGESIZE//2 - IMAGESIZE//8):(IMAGESIZE//2 - IMAGESIZE//8) + IMAGESIZE//4])
         max_y, max_x = np.unravel_index(np.argmax(tem_crop), tem_crop.shape)
         x_final = x_start + max_x + sx
         y_final = y_start + max_y + sy
@@ -257,9 +261,9 @@ class PhaseRetrieval(object):
         self.final_sp = None
         self.final_bg = None
         self.final = None
-        self.image_size = 3072
+        self.image_size = IMAGESIZE
 
-    def phase_retrieval(self, m_factor, strategy="try", sp=(0, 0)):
+    def phase_retrieval(self, strategy="try", sp=(0, 0)):
         # open img
         self.sp.open_image()
         self.bg.open_image()
@@ -309,7 +313,7 @@ class PhaseRetrieval(object):
         self.final = self.final_sp - self.final_bg
 
         # m_factor
-        diff = m_factor - np.mean(self.final)
+        diff = M - np.mean(self.final)
         self.final = self.final + diff
 
     def try_the_position(self, bt_obj):
@@ -367,7 +371,7 @@ class PhaseRetrieval(object):
         """beware of Memory"""
         plt.figure(dpi=200, figsize=(10, 10))
         if center:
-            plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=3.5)
+            plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=MAXPHASE)
         else:
             plt.imshow(self.final, cmap='jet', vmin=-0.5, vmax=3)
         plt.colorbar()
@@ -477,8 +481,8 @@ class MatchFlourPhase(object):
 
         # Photonfocus crop to 3072 * 3072
         b = im_f.img.shape[0]
-        start = b // 2 - 3072 // 2
-        end = b // 2 + 3072 // 2
+        start = b // 2 - IMAGESIZE // 2
+        end = b // 2 + IMAGESIZE // 2
         im_f.img = im_f.img[start - shift_y: end - shift_y, start - shift_x: end - shift_x]
 
         # subplots
@@ -591,7 +595,7 @@ class CellLabelOneImage(WorkFlow):
     def phase2uint8(self):
         plt.figure(dpi=200, figsize=(10, 10))
         plt.title(str(self.target) + " original image")
-        plt.imshow(self.img, cmap='jet', vmax=2.5, vmin=-0.2)
+        plt.imshow(self.img, cmap='jet', vmax=2.5, vmin=MINPHASE)
         plt.axis("off")
         plt.show()
         self.img[self.img >= 4] = 0
@@ -694,7 +698,7 @@ class CellLabelOneImage(WorkFlow):
             plt.show()
 
     def find_local_max(self):
-        marker = np.zeros((3072, 3072), np.uint8)
+        marker = np.zeros((IMAGESIZE, IMAGESIZE), np.uint8)
 
         # 220 is the size of RPE
         local_maxi = peak_local_max(self.img, indices=False, footprint=np.ones((220, 220)), threshold_abs=20)
@@ -736,7 +740,7 @@ class CellLabelOneImage(WorkFlow):
             except:
                 raise FileExistsError("cannot open afterwater file")
         else:
-            afterwater = np.zeros((3072, 3072), dtype=np.uint8)
+            afterwater = np.zeros((IMAGESIZE, IMAGESIZE), dtype=np.uint8)
 
         r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.marker_path, cur_img_num=self.target, afterwater=afterwater)
         r.run()
@@ -893,7 +897,7 @@ class App(object):
 
             if ch in [ord('q'), ord('Q')]:
                 for label in range(2, 85):
-                    black = np.zeros((3072, 3072), dtype=np.uint8)
+                    black = np.zeros((IMAGESIZE, IMAGESIZE), dtype=np.uint8)
                     black[self.m == label] = 255
                     ret, b = cv2.connectedComponents(black)
                     if ret > 2:
@@ -932,7 +936,7 @@ class PrevNowMatching(object):
         self.output = None
 
         # lost map
-        self.lost_map = np.zeros((3072, 3072))
+        self.lost_map = np.zeros((IMAGESIZE, IMAGESIZE))
 
     def run(self):
         self.check_prev_label()
@@ -947,7 +951,7 @@ class PrevNowMatching(object):
         plt.imshow(image, cmap='jet', vmax=90, vmin=0)
         for i in range(2, 90):
             if len(image[image == i]) != 0:
-                image_tem = np.zeros((3072, 3072), dtype=np.uint8)
+                image_tem = np.zeros((IMAGESIZE, IMAGESIZE), dtype=np.uint8)
                 image_tem[image == i] = 255
                 x, y = self.centroid(image_tem)
                 plt.scatter(x, y, s=5, c='g')
@@ -982,7 +986,7 @@ class PrevNowMatching(object):
             label = iterative_label[i]
 
             # find corresponding label in now
-            black = np.zeros((3072, 3072))
+            black = np.zeros((IMAGESIZE, IMAGESIZE))
             black[self.prev_label_map == label] = 255
             x, y = self.centroid(black)
             corresponded_label = self.now_label_map[y, x]
@@ -1028,7 +1032,7 @@ class PrevNowMatching(object):
         if appear_list and disappear_list:
             for disappear in disappear_list:
                 for appear in appear_list:
-                    black = np.zeros((3072, 3072))
+                    black = np.zeros((IMAGESIZE, IMAGESIZE))
                     if len(black[(self.prev_label_map == disappear) & (self.now_label_map == appear)]) != 0:
                         # find overlap
                         print("Round 2 : prev label:", disappear, "match --> now label: ", appear)
@@ -1186,7 +1190,7 @@ class AnalysisCellFeature(WorkFlow):
             # crop image
             crop_binary = binary[y:y + h, x:x + w]
             crop_phase = phase_copy[y:y + h, x:x + w]
-            crop_phase = 255 * (crop_phase + 0.2) / (3.5 + 0.2)
+            crop_phase = 255 * (crop_phase - MINPHASE) / (MAXPHASE - MINPHASE)
             crop_phase = crop_phase.astype(np.uint8)
 
             # distance coef
@@ -1261,18 +1265,18 @@ class Fov(WorkFlow):
             check_file_exist(p, p)
 
     def run(self):
-        center = (3072//2, 3072//2)
-        radius = 3072//2
+        center = (IMAGESIZE//2, IMAGESIZE//2)
+        radius = IMAGESIZE//2
         for i, im_p, pic_p in zip(self.cur_num, self.file_list, self.pic_save):
             print(im_p)
             img = np.load(im_p)
-            black = np.zeros((3072, 3072), dtype=np.uint8)
+            black = np.zeros((IMAGESIZE, IMAGESIZE), dtype=np.uint8)
             black = cv2.circle(black, center, radius, 1, thickness=-1)
             img[black == 0] = 0
             np.save(im_p, img)
             plt.figure(i)
             plt.title(i + "phase image")
-            plt.imshow(img, cmap='jet', vmax=3, vmin=-0.2)
+            plt.imshow(img, cmap='jet', vmax=MAXPHASE, vmin=MINPHASE)
             plt.axis("off")
             plt.colorbar()
             plt.savefig(pic_p)
