@@ -1,4 +1,5 @@
 from matplotlib.colors import LinearSegmentedColormap
+import numpy as np
 
 # green colorbar
 cdict1 = {'red': ((0.0, 0.0, 0.0),

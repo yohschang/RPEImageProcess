@@ -13,5 +13,6 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 # label_img = np.load(env.afterwater_path + "30_afterwater.npy")
 
 acf = AnalysisCellFeature(root_path)
-acf.image_by_image()
+# acf.image_by_image(dbsave=True)
+acf.check_last_id()
 

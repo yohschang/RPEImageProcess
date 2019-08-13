@@ -42,13 +42,13 @@ class RetinalPigmentEpithelium(Base):
         self.label_path = label_path
 
         # features
-        self.phase_mean = 0.0
-        self.phase_std = 0.0
-        self.circularity = 0.0
-        self.area = 0.0
-        self.apoptosis = False
-        self.mean_optical_height = 0.0
-        self.distance_coef = 0.0
+        self.phase_mean = features[0]
+        self.phase_std = features[1]
+        self.circularity = features[2]
+        self.area = features[3]
+        self.apoptosis = features[4]
+        self.mean_optical_height = features[5]
+        self.distance_coef = features[6]
 
     def __repr__(self):
         repr_str1 = "<RetinalPigmentEpithelium("

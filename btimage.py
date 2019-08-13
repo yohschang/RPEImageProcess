@@ -282,8 +282,8 @@ class PhaseRetrieval(object):
             x, y = sp[0], sp[1]
 
         # crop real or virtual image
-        self.sp.crop_first_order(x, y, 768)
-        self.bg.crop_first_order(0, 1, 768)
+        self.sp.crop_first_order(x, y, IMAGESIZE//4)
+        self.bg.crop_first_order(0, 1, IMAGESIZE//4)
         print(x, y)
 
         # iFFT
@@ -322,7 +322,7 @@ class PhaseRetrieval(object):
         minj = 100
         for i in np.arange(-2, 3, 1):
             for j in np.arange(-2, 3, 1):
-                bt_obj.crop_first_order(i, j, 768)
+                bt_obj.crop_first_order(i, j, IMAGESIZE//4)
                 bt_obj.twodifft(bt_obj.crop_raw_f_domain)
                 unwrap_ = unwrap_phase(bt_obj.iff)
                 buffer_sd = np.std(unwrap_)
@@ -386,10 +386,6 @@ class PhaseRetrieval(object):
 
     def write_final(self, dir_npy):
         np.save(dir_npy + self.name + "_phase.npy", self.final)
-
-    def write_to_png(self, dir_png):
-        rescale_img = self.final * 255/(5-(-1))
-        cv2.imwrite(dir_png + self.name + "_phase.png", rescale_img)
 
 
 class TimeLapseCombo(WorkFlow):
@@ -1128,14 +1124,21 @@ class AnalysisCellFeature(WorkFlow):
         # database
         self.dbsave = False
         self.sess = None
+        self.engine = None
         self.current_id = 0
         self.date = (2019, 7, 8)
-        # self.connect_to_db()
+        self.connect_to_db()
 
-    def image_by_image(self):
-        for i in range(len(self.phase_img_list)):
+    def image_by_image(self, dbsave=False):
+        self.dbsave = dbsave
+        # find id
+        self.check_last_id()
+        for i in tqdm.trange(len(self.phase_img_list)):
             print("image ", str(i+1))
+            # an image
             self.one_by_one(i, plot_mode=False)
+        if self.dbsave:
+            self.db_commit()
 
     def one_by_one(self, i, plot_mode=False):
 
@@ -1196,9 +1199,13 @@ class AnalysisCellFeature(WorkFlow):
             # distance coef
             dis = cv2.distanceTransform(crop_binary, cv2.DIST_L2, 5)
             res = cv2.matchTemplate(crop_phase, dis.astype(np.uint8), cv2.TM_CCOEFF_NORMED)
-            distance_coef = res.max()
+            distance_coef = round(float(res.max()), 3)
+
+            # apoptosis
+            apoptosis = False
 
             print("mean: ", phase_mean, "std", phase_std, "area: ", area, "circularity: ", circularity, "height: ", height, "dis_coef: ", distance_coef)
+            features = [phase_mean, phase_std, circularity, area, apoptosis, height, distance_coef]
 
             if plot_mode:
                 rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
@@ -1222,7 +1229,9 @@ class AnalysisCellFeature(WorkFlow):
                 plt.show()
 
             if self.dbsave:
-                self.check_last_id()
+                # add a row
+                self.update_to_db(label=label, time=i+1, features=features)
+                self.current_id += 1
 
     def label_analyzed(self, label_img):
         for label in range(2, 90):
@@ -1232,20 +1241,44 @@ class AnalysisCellFeature(WorkFlow):
     def connect_to_db(self):
         """ MYSQL """
         passward = getenv("DBPASS")
-        engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
-        Session = sessionmaker(bind=engine, autoflush=False)
+        self.engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
+        Session = sessionmaker(bind=self.engine, autoflush=False)
         self.sess = Session()
         print("Connect...")
 
     def check_last_id(self):
+        assert self.sess is not None
         obj = self.sess.query(RetinalPigmentEpithelium).order_by(RetinalPigmentEpithelium.id.desc()).first()
         if obj is None:
             self.current_id = 0
-        self.current_id = obj.id
+        else:
+            self.current_id = obj.id
         print("current id: ", self.current_id)
 
-    def update_to_db(self):
-        pass
+    def update_to_db(self, label, time, features):
+        id = self.current_id + 1
+        year, month, day = self.date
+        img_path = ""
+        label_path = ""
+
+        # check
+        assert type(id) is int
+        assert (type(year) is int) and (type(month) is int) and (type(day) is int)
+        assert (type(label) is int) and (type(time) is int)
+        assert type(features[0]) is float
+        assert type(features[1]) is float
+        assert type(features[2]) is float
+        assert type(features[3]) is float
+        assert type(features[4]) is bool
+        assert type(features[5]) is float
+        assert type(features[6]) is float
+
+        tem = RetinalPigmentEpithelium(id, year, month, day, label, time, img_path, label_path, features)
+        self.sess.add(tem)
+
+    def db_commit(self):
+        self.sess.commit()
+        self.engine.dispose()
 
     def plot_the_graph(self):
         # take the data and plot it in different plot

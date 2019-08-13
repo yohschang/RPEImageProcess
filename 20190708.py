@@ -12,12 +12,12 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 ####################################################################################
 
 
-def test():
-    t = TimeLapseCombo(root_path=root_path)
-    t.read(1, 36)
-    t.combo(target=26, save=True, strategy="cheat")
-
-test()
+# def test():
+#     t = TimeLapseCombo(root_path=root_path)
+#     t.read(1, 36)
+#     t.combo(target=26, save=True, strategy="cheat")
+#
+# test()
 ####################################################################################
 # f = Fov(root_path, 1, 36)
 # f.run()
@@ -44,23 +44,10 @@ test()
 
 
 ####################################################################################
-# test
-path = "E:\\DPM\\20190708\\Bead\\1\\SP\\time-lapse\\afterwater\\1_afterwater.npy"
-# check_file_exist(path, "npy file")
-# test_afterwater = np.load(path)
-# plt.figure()
-# plt.imshow(test_afterwater, cmap="jet")
-# plt.show()
-#
-# label_list = []
-# for label in range(90):
-#     cur_label_num = len(test_afterwater[test_afterwater == label])
-#     if 4000 <= cur_label_num <= 1000000:
-#         # remove too small area and BG area
-#         label_list.append(label)
-#         print("label:", label, "has:", cur_label_num, "pixel")
+acf = AnalysisCellFeature(root_path)
+# acf.image_by_image(dbsave=True)
+acf.check_last_id()
 
 
-# kernel = np.ones((3, 3), np.uint8)
-# e = cv2.erode(test_afterwater, kernel)
+
 
