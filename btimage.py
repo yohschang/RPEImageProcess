@@ -41,8 +41,6 @@ from colorbarforAPP import *
 from ConfigRPE import *
 
 
-
-
 def round_all_the_entries_ndarray(matrix, decimal):
     for i in range(matrix.shape[0]):
         for j in range(matrix.shape[1]):
