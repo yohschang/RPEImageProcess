@@ -6,8 +6,8 @@ from sqlalchemy import Column, String, Float, Integer, Boolean
 
 
 engine = create_engine('mysql+pymysql://BT:x1x4x5x6@127.0.0.1:3306/Cell')
-Session = sessionmaker(bind=engine, autoflush=False)
-sess = Session()
+# Session = sessionmaker(bind=engine, autoflush=False)
+# sess = Session()
 Base = declarative_base()
 
 
@@ -69,5 +69,5 @@ class RetinalPigmentEpithelium(Base):
 
 # connect engine to database obj
 Base.metadata.create_all(engine)
-sess.commit()
+# sess.commit()
 engine.dispose()

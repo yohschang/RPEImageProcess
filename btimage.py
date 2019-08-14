@@ -37,6 +37,7 @@ import tqdm
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 
+
 from databaseORM import RetinalPigmentEpithelium
 from colorbarforAPP import *
 from ConfigRPE import *
@@ -423,8 +424,9 @@ class TimeLapseCombo(WorkFlow):
     def combo(self, target=-1, save=False, strategy="try", sp=(0, 0), bg=(0, 0)):
         """ target is the number of image """
         self.read()
-        # combo
+
         if target == -1:
+            # combo
             for i, m in zip(range(len(self.pathsp_list)), np.arange(0.3, 0, -0.3/40)):
                 pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                 try:
@@ -441,6 +443,7 @@ class TimeLapseCombo(WorkFlow):
                     print(i, "th cannot be retrieved ", e)
 
         elif target > 0:
+            # specific target
             pr = PhaseRetrieval(self.pathsp_list[target-1], self.pathbg_list[0])
             pr.phase_retrieval(sp, bg, strategy=strategy)
             if np.std(pr.final) > self.SD_threshold:
@@ -450,49 +453,54 @@ class TimeLapseCombo(WorkFlow):
             pr.plot_sp_bg()
             # pr.plot_fdomain()
 
-            print(np.std(pr.final))
+            print("phase std: ", np.std(pr.final))
             if save:
                 np.save(self.phase_npy_path + str(target) + "_phase.npy", pr.final)
                 print(self.phase_npy_path + str(target) + "_phase.npy")
                 # pr.write_final(output_dir)
         else:
-            raise IndexError("invalid target number!")
+            raise IndexError("Invalid target number!")
 
 
 class MatchFlourPhase(object):
-    def __init__(self, path_phasemap, path_fluor):
-        self.path_phasemap = path_phasemap
-        self.path_fluor = path_fluor
-        self.completed = None
-
-    def match(self, shift_x, shift_y):
-        im = BT_image(self.path_phasemap)
-        im.opennpy()
-        im_f = BT_image(self.path_fluor)
+    def __init__(self, path_phasemap, path_flour):
+        
+        # read phase image
+        check_file_exist(path_phasemap, "phase image")
+        im = BT_image(path_phasemap)
+        im.open_image()
+        self.im = im
+        
+        # read flour image
+        check_file_exist(path_flour, "flour image")
+        im_f = BT_image(path_flour)
         im_f.open_image()
         im_f.img = cv2.flip(im_f.img, -1)
+        self.im_f = im_f
 
-        # two image ratio
-        m_obj = 27.778
-        m = 46.5
-        view_pixel = 5.5
-        photon_pixel = 8
-        ratio = (m / view_pixel) / (m_obj / photon_pixel)
-        new_size = int(im_f.img.shape[0] * ratio)
-        im_f.img = cv2.resize(im_f.img, (new_size, new_size), interpolation=cv2.INTER_CUBIC)
+        # two image diffeerence
+        self.m_obj = 28
+        self.m = 46.5
+        self.viework_pixel = 5.5
+        self.point_gray_pixel = 5.5
+
+    def match(self, shift_x, shift_y):
+        ratio = (self.m / self.viework_pixel) / (self.m_obj / self.point_gray_pixel)
+        new_size = int(self.im_f.img.shape[0] * ratio)
+        self.im_f.img = cv2.resize(self.im_f.img, (new_size, new_size), interpolation=cv2.INTER_CUBIC)
 
         # Photonfocus crop to 3072 * 3072
-        b = im_f.img.shape[0]
+        b = self.im_f.img.shape[0]
         start = b // 2 - IMAGESIZE // 2
         end = b // 2 + IMAGESIZE // 2
-        im_f.img = im_f.img[start - shift_y: end - shift_y, start - shift_x: end - shift_x]
+        self.im_f.img = self.im_f.img[start - shift_y: end - shift_y, start - shift_x: end - shift_x]
 
         # subplots
         fig, axes = plt.subplots(nrows=1, ncols=2, dpi=200, figsize=(25, 10))
-        im0 = axes[0].imshow(im.img, cmap='gray', vmax=14, vmin=-0.5)
+        im0 = axes[0].imshow(self.im.img, cmap='gray')
         axes[0].set_title("Phase image", fontsize=30)
 
-        im1 = axes[1].imshow(im_f.img, cmap=green)
+        im1 = axes[1].imshow(self.im_f.img, cmap=green)
         axes[1].set_title("Fluorescent image", fontsize=30)
 
         fig.subplots_adjust(right=1)
@@ -504,10 +512,8 @@ class MatchFlourPhase(object):
         cbar_ax1.set_title('a.u.')
         plt.show()
 
-        self.completed = im_f.img
-
     def save(self, pathandname):
-        np.save(pathandname, self.completed)
+        np.save(pathandname, self.im_f.img)
 
 
 class CellLabelOneImage(WorkFlow):
