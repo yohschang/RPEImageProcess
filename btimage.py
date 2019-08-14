@@ -445,7 +445,7 @@ class TimeLapseCombo(WorkFlow):
             pr.phase_retrieval(sp, bg, strategy=strategy)
             if np.std(pr.final) > self.SD_threshold:
                 pr.phase_retrieval(sp, bg, strategy=strategy)
-            pr.plot_final(center=False, num=target-1)
+            pr.plot_final(center=False, num=target)
             # pr.plot_hist()
             pr.plot_sp_bg()
             # pr.plot_fdomain()

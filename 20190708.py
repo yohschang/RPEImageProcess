@@ -101,10 +101,10 @@ def first_derivatives(array, dx=1):
 root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 ####################################################################################
 
-# TimeLapseCombo(root_path=root_path).combo(target=-1, save=True, strategy="cheat", sp=(0, 0), bg=(0, 0))
+TimeLapseCombo(root_path=root_path).combo(target=25, save=False, strategy="try", sp=(1, -2), bg=(0, 3))
 
 ####################################################################################
-# Fov(root_path, 1, 36).run()
+# Fov(root_path).run()
 
 ###################################################################################
 # label and match
