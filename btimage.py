@@ -43,13 +43,6 @@ from colorbarforAPP import *
 from ConfigRPE import *
 
 
-def round_all_the_entries_ndarray(matrix, decimal):
-    for i in range(matrix.shape[0]):
-        for j in range(matrix.shape[1]):
-            matrix[i, j] = round(matrix[i, j], decimal)
-    return matrix
-
-
 def check_file_exist(this_path, text):
     my_file = Path(this_path)
     if not my_file.exists():
@@ -58,14 +51,13 @@ def check_file_exist(this_path, text):
 
 def check_img_size(image):
     try:
-        if image.shape[0] != IMAGESIZE:
-            raise AssertionError("Image size is not 3072!")
+        if image.shape[0] != IMAGESIZE or image.shape[1] != IMAGESIZE:
+            raise AssertionError("Image size is not " + str(IMAGESIZE) + " !")
     except:
         raise TypeError("This file is not ndarray!")
 
 
 class BT_image(object):
-    """docstring"""
     def __init__(self, path):
         check_file_exist(path, "image")
         self.path = path
@@ -219,6 +211,7 @@ class BT_image(object):
 
 
 class WorkFlow(object):
+    """Create the structure of folder for analyzing RPE cell"""
     def __init__(self, root):
         self.root = root
         check_file_exist(self.root, "root directory")
@@ -517,7 +510,7 @@ class MatchFlourPhase(object):
 
 
 class CellLabelOneImage(WorkFlow):
-    """Instance recognition"""
+    """Instance segmentation"""
 
     def __init__(self, root, target=-1):
         super().__init__(root)
@@ -1115,6 +1108,7 @@ class PrevNowCombo(WorkFlow):
 ###########################################################################################
 
 class AnalysisCellFeature(WorkFlow):
+    """ Find the features for every cell. Store the features in Database"""
     def __init__(self, root):
         super().__init__(root)
 
@@ -1137,6 +1131,7 @@ class AnalysisCellFeature(WorkFlow):
         self.dbsave = False
         self.pngsave = False
         self.plot_mode = False
+        self.precision = 3
         self.sess = None
         self.engine = None
         self.current_id = 0
@@ -1182,9 +1177,9 @@ class AnalysisCellFeature(WorkFlow):
             x, y, w, h = cv2.boundingRect(binary)
 
             # mean
-            phase_mean = round(float(np.mean(a)), 3)
+            phase_mean = round(float(np.mean(a)), self.precision)
             # std
-            phase_std = round(float(np.std(a)), 3)
+            phase_std = round(float(np.std(a)), self.precision)
             # area, circularity
             binary, contours, hierarchy = cv2.findContours(binary,
                                                            cv2.RETR_TREE,
@@ -1201,10 +1196,10 @@ class AnalysisCellFeature(WorkFlow):
 
             perimeter = cv2.arcLength(approx_contour, True)
             area = cv2.contourArea(approx_contour)
-            circularity = round(4 * np.pi * area / perimeter ** 2, 3)
+            circularity = round(4 * np.pi * area / perimeter ** 2, self.precision)
 
             # mean optical height
-            height = round(0.532 * phase_mean / 2 / np.pi / (1.37 - 1.33), 3)
+            height = round(0.532 * phase_mean / 2 / np.pi / (1.37 - 1.33), self.precision)
 
             # crop image
             crop_binary = binary[y:y + h, x:x + w]
@@ -1217,7 +1212,7 @@ class AnalysisCellFeature(WorkFlow):
             # distance coef
             dis = cv2.distanceTransform(crop_binary, cv2.DIST_L2, 5)
             res = cv2.matchTemplate(crop_phase, dis.astype(np.uint8), cv2.TM_CCOEFF_NORMED)
-            distance_coef = round(float(res.max()), 3)
+            distance_coef = round(float(res.max()), self.precision)
 
             # apoptosis
             apoptosis = False
