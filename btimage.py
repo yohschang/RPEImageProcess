@@ -23,6 +23,7 @@ function:
 
 import cv2
 from os import makedirs, listdir, getenv
+from os.path import isdir
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -261,7 +262,7 @@ class PhaseRetrieval(object):
         self.final = None
         self.image_size = IMAGESIZE
 
-    def phase_retrieval(self, strategy="try", sp=(0, 0)):
+    def phase_retrieval(self, sp=(0, 0), bg=(0, 0), strategy="try"):
         # open img
         self.sp.open_image()
         self.bg.open_image()
@@ -274,15 +275,18 @@ class PhaseRetrieval(object):
 
         # ----------------------------------------------------------------
         x, y = 0, 0
+        bgx, bgy = 0, 0
         if strategy == "try":
             x, y = self.try_the_position(self.sp)
+            bgx, bgy = self.try_the_position(self.bg)
         elif strategy == "cheat":
             x, y = sp[0], sp[1]
+            bgx, bgy = bg[0], bg[1]
 
         # crop real or virtual image
         self.sp.crop_first_order(x, y, IMAGESIZE//4)
-        self.bg.crop_first_order(0, 1, IMAGESIZE//4)
-        print(x, y)
+        self.bg.crop_first_order(bgx, bgy, IMAGESIZE//4)
+        print("sp position: ", (x, y), "bg position: ", (bgx, bgy))
 
         # iFFT
         self.sp.twodifft(self.sp.crop_raw_f_domain)
@@ -392,9 +396,12 @@ class TimeLapseCombo(WorkFlow):
         self.pathsp_list = []
         self.pathbg_list = []
         self.cur_num = 1
+        self.SD_threshold = 1.51
 
-    def read(self, start, end):
-        for i in range(start, end+1):
+    def read(self):
+        file_number = len(glob.glob(self.root + "[0-9]*"))
+        print("Found ", file_number, "pair image")
+        for i in range(1, file_number+1):
 
             # read one BG at the root dir
             found_bg = glob.glob(self.root + "*.bmp")
@@ -405,23 +412,26 @@ class TimeLapseCombo(WorkFlow):
 
             # read many SP
             path_cur = self.root + str(i) + "\\"
-            check_file_exist(path_cur, i)
+            check_file_exist(path_cur, " interferogram #" + str(i))
+            # find interferogram
             found_file = glob.glob(path_cur + "*.bmp")
             if len(found_file) != 1:
                 raise FileExistsError("SP lost or too many SP")
             print("SP:", found_file[0])
             self.pathsp_list.append(found_file[0])
 
-    def combo(self, target=-1, save=False, m_factor=0, strategy="try"):
+    def combo(self, target=-1, save=False, strategy="try", sp=(0, 0), bg=(0, 0)):
+        """ target is the number of image """
+        self.read()
         # combo
         if target == -1:
             for i, m in zip(range(len(self.pathsp_list)), np.arange(0.3, 0, -0.3/40)):
                 pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
                 try:
-                    pr.phase_retrieval(sp=(0, 0), strategy=strategy)
+                    pr.phase_retrieval(sp, bg, strategy=strategy)
                     print(str(i), " SD:", np.std(pr.final))
-                    if np.std(pr.final) > 1.51:
-                        pr.phase_retrieval(sp=(0, 1), strategy=strategy)
+                    if np.std(pr.final) > self.SD_threshold:
+                        pr.phase_retrieval(sp, bg, strategy=strategy)
                     pr.plot_final(center=False, num=i)
                     # pr.plot_hist()
                     if save:
@@ -430,25 +440,23 @@ class TimeLapseCombo(WorkFlow):
                 except TypeError as e:
                     print(i, "th cannot be retrieved ", e)
 
-        else:
-            # only for checking
-            for i in tqdm.trange(len(self.pathsp_list)):
-                if i == target:
-                    pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
-                    pr.phase_retrieval(sp=(1, -3))
-                    if np.std(pr.final) > 1:
-                        pr.phase_retrieval(sp=(1, -4), strategy=strategy)
-                    pr.plot_final(center=False, num=i)
-                    pr.plot_hist()
-                    pr.plot_sp_bg()
-                    pr.plot_fdomain()
+        elif target > 0:
+            pr = PhaseRetrieval(self.pathsp_list[target-1], self.pathbg_list[0])
+            pr.phase_retrieval(sp, bg, strategy=strategy)
+            if np.std(pr.final) > self.SD_threshold:
+                pr.phase_retrieval(sp, bg, strategy=strategy)
+            pr.plot_final(center=False, num=target-1)
+            # pr.plot_hist()
+            pr.plot_sp_bg()
+            # pr.plot_fdomain()
 
-                    print(np.std(pr.final))
-                    # pr.plot_fdomain()
-                    if save:
-                        np.save(self.phase_npy_path + str(i) + "_phase.npy", pr.final)
-                        print(self.phase_npy_path + str(i) + "_phase.npy")
-                        # pr.write_final(output_dir)
+            print(np.std(pr.final))
+            if save:
+                np.save(self.phase_npy_path + str(target) + "_phase.npy", pr.final)
+                print(self.phase_npy_path + str(target) + "_phase.npy")
+                # pr.write_final(output_dir)
+        else:
+            raise IndexError("invalid target number!")
 
 
 class MatchFlourPhase(object):
@@ -1294,11 +1302,13 @@ class AnalysisCellFeature(WorkFlow):
 
 
 class Fov(WorkFlow):
-    def __init__(self, root, start, end):
+    def __init__(self, root):
         super().__init__(root)
-        self.file_list = [self.phase_npy_path + str(p) + "_phase.npy" for p in range(start, end+1)]
-        self.pic_save = [self.pic_path + str(p) + ".png" for p in range(start, end+1)]
-        self.cur_num = [str(p) for p in range(start, end+1)]
+        file_number = len(glob.glob(self.root + "[0-9]*"))
+        print("Found ", file_number, "pair image")
+        self.file_list = [self.phase_npy_path + str(p) + "_phase.npy" for p in range(1, file_number+1)]
+        self.pic_save = [self.pic_path + str(p) + ".png" for p in range(1, file_number+1)]
+        self.cur_num = [str(p) for p in range(1, file_number+1)]
         self.check_file()
 
     def check_file(self):
