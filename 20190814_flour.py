@@ -1,4 +1,4 @@
-from btimage import PhaseRetrieval, TimeLapseCombo, BT_image
+from btimage import PhaseRetrieval, TimeLapseCombo, BT_image, CellLabelOneImage
 from matplotlib import pyplot as plt
 import cv2
 

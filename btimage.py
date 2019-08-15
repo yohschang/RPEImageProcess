@@ -223,25 +223,26 @@ class WorkFlow(object):
         self.fluor_path = root + "fluor\\"
 
         # create dir
-        self.create_dir(self.phase_npy_path)
-        self.create_dir(self.pic_path)
-        self.create_dir(self.marker_path)
-        self.create_dir(self.afterwater_path)
-        self.create_dir(self.analysis_path)
-        self.create_dir(self.fluor_path)
+        self.__create_dir(self.phase_npy_path)
+        self.__create_dir(self.pic_path)
+        self.__create_dir(self.marker_path)
+        self.__create_dir(self.afterwater_path)
+        self.__create_dir(self.analysis_path)
+        self.__create_dir(self.fluor_path)
 
         # prepare
-        self.kaggle_img_path = "C:\\Users\\BT\\Desktop\\kaggle\\RPE_crop_image\\"
-        self.kaggle_mask_path = "C:\\Users\\BT\\Desktop\\kaggle\\RPE_crop_mask\\"
+        self.kaggle_img_path = KAGGLE_IMG
+        self.kaggle_mask_path = KAGGLE_MASK
 
-    def create_dir(self, path):
+    def __create_dir(self, path):
+        """private"""
         my_file = Path(path)
         if not my_file.exists():
             makedirs(path)
 
 
 class PhaseRetrieval(object):
-
+    """private class. Please do not instantiate it !"""
     def __init__(self, pathsp, pathbg):
         self.name = pathsp.split("\\")[-1].replace(".bmp", "")
         self.path = pathsp.replace(self.name, "").replace(".bmp", "")
@@ -392,7 +393,8 @@ class TimeLapseCombo(WorkFlow):
         self.cur_num = 1
         self.SD_threshold = 1.51
 
-    def read(self):
+    def __read(self):
+        """ private """
         file_number = len(glob.glob(self.root + "[0-9]*"))
         print("Found ", file_number, "pair image")
         for i in range(1, file_number+1):
@@ -416,7 +418,7 @@ class TimeLapseCombo(WorkFlow):
 
     def combo(self, target=-1, save=False, strategy="try", sp=(0, 0), bg=(0, 0)):
         """ target is the number of image """
-        self.read()
+        self.__read()
 
         if target == -1:
             # combo
@@ -530,15 +532,15 @@ class CellLabelOneImage(WorkFlow):
 
     def run(self, adjust=False, plot_mode=False, load="no", save_water=False):
         self.plot_mode = plot_mode
-        self.phase2uint8()
-        self.smoothing()
-        self.sharpening(0.15, 30)
-        self.adaptive_threshold()
-        self.morphology_operator()
-        self.prepare_bg()
-        self.distance_trans()
-        self.find_local_max()
-        self.watershed_algorithm()
+        self.__phase2uint8()
+        self.__smoothing()
+        self.__sharpening(0.15, 30)
+        self.__adaptive_threshold()
+        self.__morphology_operator()
+        self.__prepare_bg()
+        self.__distance_trans()
+        self.__find_local_max()
+        self.__watershed_algorithm()
 
         if adjust:
             if load == "old":
@@ -575,7 +577,7 @@ class CellLabelOneImage(WorkFlow):
                 afterwater_file = None
             else:
                 raise Exception("invalid argument of load: " + load)
-            self.watershed_manually(marker_file, afterwater_file)
+            self.__watershed_manually(marker_file, afterwater_file)
 
         if save_water:
             np.save(self.afterwater_path + str(self.target) + "_afterwater.npy", self.after_water)
@@ -586,14 +588,14 @@ class CellLabelOneImage(WorkFlow):
 
         return self.after_water
 
-    def plot_gray(self, image, title_str):
+    def __plot_gray(self, image, title_str):
         plt.figure()
         plt.title(title_str)
         plt.imshow(image, cmap="gray")
         plt.colorbar()
         plt.show()
 
-    def phase2uint8(self):
+    def __phase2uint8(self):
         plt.figure(dpi=200, figsize=(10, 10))
         plt.title(str(self.target) + " original image")
         plt.imshow(self.img, cmap='jet', vmax=2.5, vmin=MINPHASE)
@@ -608,14 +610,14 @@ class CellLabelOneImage(WorkFlow):
         t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
         self.img = np.uint8(np.round(image_rescale))
         if self.plot_mode:
-            self.plot_gray(self.img, "original image")
+            self.__plot_gray(self.img, "original image")
         return self.img
 
-    def smoothing(self):
+    def __smoothing(self):
         self.img = cv2.GaussianBlur(self.img, (7, 7), sigmaX=1)
         # show
 
-    def sharpening(self, cutoff_value, gain_value):
+    def __sharpening(self, cutoff_value, gain_value):
         if self.plot_mode:
             plt.figure()
             plt.hist(self.img.flatten(), bins=200)
@@ -633,7 +635,7 @@ class CellLabelOneImage(WorkFlow):
             plt.plot(x, y)
             plt.show()
 
-    def adaptive_threshold(self):
+    def __adaptive_threshold(self):
         array_image = self.img.flatten()
         # plt.figure()
         n, b, patches = plt.hist(array_image, bins=200)
@@ -656,22 +658,22 @@ class CellLabelOneImage(WorkFlow):
         self.img = cv2.adaptiveThreshold(self.img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 501, 1)
         # ret, self.img = cv2.threshold(self.img, threshold, 255, cv2.THRESH_BINARY)
         if self.plot_mode:
-            self.plot_gray(self.img, "binary image")
+            self.__plot_gray(self.img, "binary image")
 
-    def morphology_operator(self):
+    def __morphology_operator(self):
         kernel = np.ones((3, 3), np.uint8)
         self.img = cv2.morphologyEx(self.img, cv2.MORPH_CLOSE, kernel, iterations=4)
         kernel = np.ones((30, 30), np.uint8)
         self.img = cv2.morphologyEx(self.img, cv2.MORPH_OPEN, kernel, iterations=1)
         if self.plot_mode:
-            self.plot_gray(self.img, "morphology image")
+            self.__plot_gray(self.img, "morphology image")
 
-    def prepare_bg(self):
+    def __prepare_bg(self):
         self.sure_bg = self.img.copy()
         # kernel = np.ones((5, 5), np.uint8)
         # self.sure_bg = np.uint8(cv2.dilate(self.sure_bg, kernel, iterations=5))
 
-    def distance_trans(self):
+    def __distance_trans(self):
         """
                     force watershed algorithm flow to the value distance = 0 but not sure bg,
                     so distance map += 1
@@ -698,7 +700,7 @@ class CellLabelOneImage(WorkFlow):
             plt.hist(self.img.flatten(), bins=100)
             plt.show()
 
-    def find_local_max(self):
+    def __find_local_max(self):
         marker = np.zeros((IMAGESIZE, IMAGESIZE), np.uint8)
 
         # 220 is the size of RPE
@@ -711,19 +713,19 @@ class CellLabelOneImage(WorkFlow):
         markers1[self.sure_bg == 0] = 1
         self.pre_marker = np.int32(markers1)
         if self.plot_mode:
-            self.plot_gray(self.pre_marker, "local max image")
+            self.__plot_gray(self.pre_marker, "local max image")
 
-    def watershed_algorithm(self):
+    def __watershed_algorithm(self):
         rgb = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
         self.after_water = self.pre_marker.copy()
         cv2.watershed(rgb, self.after_water)
         if self.plot_mode:
-            self.plot_gray(self.after_water, "watershed image")
+            self.__plot_gray(self.after_water, "watershed image")
         ###########################################################
         # if no manually adjust, self.after_water is final output #
         ###########################################################
 
-    def watershed_manually(self, marker_file=None, afterwater_file=None):
+    def __watershed_manually(self, marker_file=None, afterwater_file=None):
         """Implement App"""
         self.img_origin = cv2.cvtColor(self.img_origin, cv2.COLOR_GRAY2BGR)
         self.distance_img = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
@@ -749,6 +751,7 @@ class CellLabelOneImage(WorkFlow):
 
 
 class Sketcher(object):
+    """Private class. Please do not instantiate it !"""
     def __init__(self, windowname, dests, colors_func):
         self.prev_pt = None
         self.windowname = windowname
@@ -801,9 +804,15 @@ class App(object):
             Keys
             ----
               SPACE - update segmentation
+              a    - find which label is available
+              s    - save marker.npy
+              q    - check two separated regions
+              t    - remove current marker
+              c    - catch the label on the image
+              l    - input the label you want
+              right click  - change the diameter of your mouse
               r     - reset
-              ESC   - exit
-
+              ESC   - exit and save afterwater.npy
         """
     def __init__(self, fn, existed_marker, show_img, save_path, cur_img_num, afterwater):
         # input parameter
@@ -828,15 +837,15 @@ class App(object):
         self.auto_update = False
 
         # canvas
-        self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.get_colors)
+        self.sketch = Sketcher('img', [self.markers_vis, self.markers], self.__get_colors)
 
-    def get_colors(self):
+    def __get_colors(self):
         pen_color = self.cur_marker*3
         if pen_color > 255:
             pen_color -= 255
         return list(map(int, self.colors[pen_color])), int(self.cur_marker)
 
-    def watershed(self):
+    def __watershed(self):
 
         # because watershed will change m
         self.m = self.markers.copy()
@@ -888,7 +897,7 @@ class App(object):
 
             # update watershed
             if ch == ord(' ') or (self.sketch.dirty and self.auto_update):
-                self.watershed()
+                self.__watershed()
                 self.sketch.dirty = False
 
             if ch in [ord('a'), ord('A')]:
@@ -913,7 +922,7 @@ class App(object):
 
             # save
             if ch in [ord('s'), ord('S')]:
-                self.watershed()
+                self.__watershed()
                 np.save(self.save_path + str(self.cur_img_num) + "_marker.npy", self.markers)
                 print("save marker to ", self.save_path + str(self.cur_img_num) + "_marker.npy")
 
@@ -929,9 +938,12 @@ class PrevNowMatching(object):
     """ creare the list of linkage"""
     def __init__(self, prev, now):
         self.prev_label_map = prev
-        self.prev_label_map[self.prev_label_map == -1] = 1
         self.now_label_map = now
+
+        # clean label
+        self.prev_label_map[self.prev_label_map == -1] = 1
         self.now_label_map[self.now_label_map == -1] = 1
+
         self.prev_list = []
         self.now_list = []
         self.output = None
@@ -940,11 +952,11 @@ class PrevNowMatching(object):
         self.lost_map = np.zeros((IMAGESIZE, IMAGESIZE))
 
     def run(self):
-        self.check_prev_label()
-        self.check_now_label()
-        self.first_round_matching()
-        self.second_round_matching()
-        self.clean_appear()
+        self.__check_prev_label()
+        self.__check_now_label()
+        self.__first_round_matching()
+        self.__second_round_matching()
+        self.__clean_appear()
         return self.output
 
     def show(self, image, text):
@@ -954,14 +966,14 @@ class PrevNowMatching(object):
             if len(image[image == i]) != 0:
                 image_tem = np.zeros((IMAGESIZE, IMAGESIZE), dtype=np.uint8)
                 image_tem[image == i] = 255
-                x, y = self.centroid(image_tem)
+                x, y = self.__centroid(image_tem)
                 plt.scatter(x, y, s=5, c='g')
                 plt.text(x, y, str(i))
         plt.title(text)
         plt.axis("off")
         plt.show()
 
-    def check_prev_label(self):
+    def __check_prev_label(self):
         for label in range(90):
             cur_label_num = len(self.prev_label_map[self.prev_label_map == label])
             if 4000 <= cur_label_num <= 1000000:
@@ -969,7 +981,7 @@ class PrevNowMatching(object):
                 self.prev_list.append(label)
                 # print("label:", label, "has:", cur_label_num, "pixel")
 
-    def check_now_label(self):
+    def __check_now_label(self):
         for label in range(90):
             cur_label_num = len(self.now_label_map[self.now_label_map == label])
             if 4000 <= cur_label_num <= 1000000:
@@ -977,7 +989,7 @@ class PrevNowMatching(object):
                 self.now_list.append(label)
                 # print("label:", label, "has:", cur_label_num, "pixel")
 
-    def first_round_matching(self):
+    def __first_round_matching(self):
         """ centroid method """
         self.output = self.now_label_map.copy()
         iterative_label = self.prev_list.copy()
@@ -989,7 +1001,7 @@ class PrevNowMatching(object):
             # find corresponding label in now
             black = np.zeros((IMAGESIZE, IMAGESIZE))
             black[self.prev_label_map == label] = 255
-            x, y = self.centroid(black)
+            x, y = self.__centroid(black)
             corresponded_label = self.now_label_map[y, x]
 
 
@@ -1025,7 +1037,7 @@ class PrevNowMatching(object):
             else:
                 print("prev label:", label, "match ", corresponded_label, "what?!")
 
-    def second_round_matching(self):
+    def __second_round_matching(self):
         """ overlap method"""
         disappear_list = self.prev_list.copy()
         appear_list = self.now_list.copy()
@@ -1057,7 +1069,7 @@ class PrevNowMatching(object):
 
         print("finish second round!")
 
-    def clean_appear(self):
+    def __clean_appear(self):
         """clean appear cell"""
         for label_appeared in self.now_list:
             self.output[self.now_label_map == label_appeared] = 1
@@ -1069,7 +1081,7 @@ class PrevNowMatching(object):
         plt.title("lost_map")
         plt.show()
 
-    def centroid(self, binary_image):
+    def __centroid(self, binary_image):
         """ find centroid"""
         moments = cv2.moments(binary_image)
         if moments['m00'] != 0:
@@ -1087,11 +1099,22 @@ class PrevNowCombo(WorkFlow):
         self.prev = None
         self.now = None
 
+    def __read(self, now_target):
+        # load prev and now label map
+        prev_file = str(now_target-1) + "_afterwater.npy"
+        now_file = str(now_target) + "_afterwater.npy"
+        print("load ", prev_file)
+        check_file_exist(self.afterwater_path + prev_file, str(prev_file))
+        self.prev = np.load(self.afterwater_path + prev_file)
+        print("load ", now_file)
+        check_file_exist(self.afterwater_path + now_file, str(now_file))
+        self.now = np.load(self.afterwater_path + now_file)
+
     def combo(self, now_target=-1, save=False):
-        print("load ", str(now_target-1) + "_afterwater.npy")
-        self.prev = np.load(self.afterwater_path + str(now_target-1) + "_afterwater.npy")
-        print("load ", str(now_target) + "_afterwater.npy")
-        self.now = np.load(self.afterwater_path + str(now_target) + "_afterwater.npy")
+        """ now_target is the number of image"""
+        self.__read(now_target=now_target)
+
+        # map
         match = PrevNowMatching(self.prev, self.now)
         output = match.run()
         # plot input
@@ -1136,7 +1159,7 @@ class AnalysisCellFeature(WorkFlow):
         self.engine = None
         self.current_id = 0
         self.date = (2019, 7, 8)
-        self.connect_to_db()
+        self.__connect_to_db()
 
     def image_by_image(self, db_save=False, png_save=False, plot_mode=False):
         self.dbsave = db_save
@@ -1147,11 +1170,11 @@ class AnalysisCellFeature(WorkFlow):
         for i in tqdm.trange(len(self.phase_img_list)):
             print("image ", str(i+1))
             # an image
-            self.one_by_one(i)
+            self.__one_by_one(i)
         if self.dbsave:
-            self.db_commit()
+            self.__db_commit()
 
-    def one_by_one(self, i):
+    def __one_by_one(self, i):
 
         # load phase img and label img
         phase_img = np.load(self.phase_img_list[i])
@@ -1159,7 +1182,7 @@ class AnalysisCellFeature(WorkFlow):
 
         # specify those label we want to analyze
         if i == 0:
-            self.label_analyzed(label_img)
+            self.__label_analyzed(label_img)
 
         # for each label
         for label in self.analysis_label:
@@ -1249,15 +1272,15 @@ class AnalysisCellFeature(WorkFlow):
                 # add a row
                 im_path = self.kaggle_img_path + str(self.current_id+1) + "_img.png"
                 label_path = self.kaggle_mask_path + str(self.current_id+1) + "_mask.png"
-                self.update_to_db(label=label, time=i+1, features=features, im_path=im_path, label_path=label_path)
+                self.__update_to_db(label=label, time=i+1, features=features, im_path=im_path, label_path=label_path)
                 self.current_id += 1
 
-    def label_analyzed(self, label_img):
+    def __label_analyzed(self, label_img):
         for label in range(2, 90):
             if len(label_img[label_img == label]) > 0:
                 self.analysis_label.append(label)
 
-    def connect_to_db(self):
+    def __connect_to_db(self):
         """ MYSQL """
         passward = getenv("DBPASS")
         self.engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
@@ -1274,7 +1297,7 @@ class AnalysisCellFeature(WorkFlow):
             self.current_id = obj.id
         print("current id: ", self.current_id)
 
-    def update_to_db(self, label, time, features, im_path, label_path):
+    def __update_to_db(self, label, time, features, im_path, label_path):
         id = self.current_id + 1
         year, month, day = self.date
 
@@ -1297,7 +1320,7 @@ class AnalysisCellFeature(WorkFlow):
         # add
         self.sess.add(tem)
 
-    def db_commit(self):
+    def __db_commit(self):
         self.sess.commit()
         self.engine.dispose()
 
@@ -1310,9 +1333,9 @@ class Fov(WorkFlow):
         self.file_list = [self.phase_npy_path + str(p) + "_phase.npy" for p in range(1, file_number+1)]
         self.pic_save = [self.pic_path + str(p) + ".png" for p in range(1, file_number+1)]
         self.cur_num = [str(p) for p in range(1, file_number+1)]
-        self.check_file()
+        self.__check_file_combo()
 
-    def check_file(self):
+    def __check_file_combo(self):
         for p in self.file_list:
             check_file_exist(p, p)
 
