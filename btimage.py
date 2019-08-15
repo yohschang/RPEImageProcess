@@ -4,16 +4,18 @@ author: BT
 Date: 20190703
 
 class:
-    WorkFlow
-    BT_image
+    WorkFlow: Create the structure of folder for analyzing RPE cell
+    BT_image: Useful image process
     PhaseRetrieval
-    PhaseCombo
-    TimeLapseCombo
-    MatchFlourPhase
-    CellLabelOneImage
-    App
+    TimeLapseCombo: From interferogram to phase image
+    MatchFlourPhase: Alignment for two image
+    CellLabelOneImage: Semi-automatic Instance Segmentation
+    App: Manually Adjust the label on image
     Sketcher
     PrevNowMatching
+    PrevNowCombo: Simple RPE object tracking
+    AnalysisCellFeature: Extract the features of RPE
+    Fov: Define the Field of View
 
 function:
     check_file_exist
