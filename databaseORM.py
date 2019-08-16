@@ -3,11 +3,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, String, Float, Integer, Boolean
+from os import getenv
 
 
-engine = create_engine('mysql+pymysql://BT:x1x4x5x6@127.0.0.1:3306/Cell')
-# Session = sessionmaker(bind=engine, autoflush=False)
-# sess = Session()
+password = getenv("DBPASS")
+engine = create_engine('mysql+pymysql://BT:' + password + '@127.0.0.1:3306/Cell')
 Base = declarative_base()
 
 
@@ -69,5 +69,4 @@ class RetinalPigmentEpithelium(Base):
 
 # connect engine to database obj
 Base.metadata.create_all(engine)
-# sess.commit()
 engine.dispose()

@@ -637,6 +637,11 @@ class CellLabelOneImage(WorkFlow):
             plt.plot(x, y)
             plt.show()
 
+            plt.figure()
+            plt.title("smoothing and sharpening")
+            plt.imshow(self.img, cmap='gray')
+            plt.show()
+
     def __adaptive_threshold(self):
         array_image = self.img.flatten()
         # plt.figure()
@@ -694,6 +699,7 @@ class CellLabelOneImage(WorkFlow):
         if self.plot_mode:
             # self.plot_gray(self.img, "dist image")
             plt.figure()
+            plt.title("distance transform")
             plt.imshow(self.img, cmap='jet')
             plt.colorbar()
             plt.show()

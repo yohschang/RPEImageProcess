@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+import pandas as pd
 from btimage import check_file_exist
 from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow, AnalysisCellFeature
 from btimage import TimeLapseCombo
@@ -109,10 +110,13 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 ###################################################################################
 # label and match
 
-# current_target = 30
-# after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="old", save_water=False)
-# output = PrevNowCombo(root_path).combo(now_target=current_target, save=True)
-
+# current_target = 2
+# after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="first", save_water=False)
+#
+# plt.figure()
+# plt.imshow(after, cmap='jet')
+# plt.show()
+# output = PrevNowCombo(root_path).combo(now_target=current_target, save=False)
 # ####################################################################################
 # analysis
 
@@ -121,13 +125,17 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 
 ####################################################################################
 # # peek the data
-# passward = getenv("DBPASS")
-# engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
-# Session = sessionmaker(bind=engine, autoflush=False)
-# sess = Session()
-# #
-# # a = sess.query(RetinalPigmentEpithelium).all()
-# # print(len(a))
+passward = getenv("DBPASS")
+engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
+Session = sessionmaker(bind=engine, autoflush=False)
+sess = Session()
+
+a = sess.query(RetinalPigmentEpithelium).all()
+print(len(a))
+
+sql = '''select * from retinalpigmentepithelium;'''
+df = pd.read_sql_query(sql, engine)
+
 # target = 40
 # a = sess.query(RetinalPigmentEpithelium).filter(RetinalPigmentEpithelium.year == 2019
 #                                                 , RetinalPigmentEpithelium.month == 7
