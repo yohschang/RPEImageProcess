@@ -23,6 +23,7 @@ function:
 
 """
 
+from PIL import Image
 import cv2
 from os import makedirs, listdir, getenv
 from os.path import isdir
@@ -39,7 +40,7 @@ import tqdm
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
 
-
+# my file
 from databaseORM import RetinalPigmentEpithelium
 from colorbarforAPP import *
 from ConfigRPE import *
@@ -84,6 +85,7 @@ class BT_image(object):
 
         if color == "g":
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        print("open ", self.path)
         self.img = img
 
     def opennpy(self):
@@ -186,6 +188,8 @@ class BT_image(object):
         f_ishift = np.fft.ifftshift(image)
         # step 7
         img_back = cv2.idft(f_ishift)  # complex ndarray [:,:,0]--> real
+        if img_back is None:
+            raise AssertionError(self.name+" is crash!")
         # step 8
         self.iff = np.arctan2(img_back[:, :, 1], img_back[:, :, 0])
         self.test = img_back
@@ -459,29 +463,106 @@ class TimeLapseCombo(WorkFlow):
             raise IndexError("Invalid target number!")
 
 
-class MatchFlourPhase(object):
-    def __init__(self, path_phasemap, path_flour):
-        
+class MatchFluorPhase(WorkFlow):
+    def __init__(self, root_path, target):
+        super().__init__(root_path)
+        path_phasemap = self.phase_npy_path + str(target) + "_phase.npy"
+        path_fluor = self.fluor_path + str(target) + ".png"
+        self.target = target
+        self.plot_overlay = False
+        self.plot_detail = False
+
         # read phase image
         check_file_exist(path_phasemap, "phase image")
-        im = BT_image(path_phasemap)
-        im.open_image()
-        self.im = im
+        self.im = np.load(path_phasemap)
         
         # read flour image
-        check_file_exist(path_flour, "flour image")
-        im_f = BT_image(path_flour)
+        check_file_exist(path_fluor, "fluor image")
+        im_f = BT_image(path_fluor)
         im_f.open_image()
         im_f.img = cv2.flip(im_f.img, -1)
         self.im_f = im_f
 
         # two image diffeerence
-        self.m_obj = 28
+        self.m_obj = 27.5
         self.m = 46.5
         self.viework_pixel = 5.5
         self.point_gray_pixel = 5.5
 
-    def match(self, shift_x, shift_y):
+    def fluor_preprocessing(self, ratio):
+        self.im_f.twodfft()
+
+        # read filter
+        filter = r"E:\DPM\20190819\1\time-lapse\fluor\Filter.tif"
+        check_file_exist(filter, "band pass filter")
+        im = np.array(Image.open(filter))
+
+        # filter and fluor image size
+        assert im.shape == self.im_f.raw_f_domain.shape[:2]
+
+        # band pass filter
+        real = np.multiply(self.im_f.raw_f_domain[:, :, 0], im)
+        imag = np.multiply(self.im_f.raw_f_domain[:, :, 1], im)
+        after_filter = np.zeros((im.shape[0], im.shape[1], 2))
+        after_filter[:, :, 0] = real
+        after_filter[:, :, 1] = imag
+
+        # iFFT
+        f_ishift = np.fft.ifftshift(after_filter)
+        img_back = cv2.idft(f_ishift)  # complex ndarray [:,:,0]--> real
+        if img_back is None:
+            raise AssertionError("Cannot ifft fluor image!")
+        img_back = cv2.magnitude(img_back[:, :, 0], img_back[:, :, 1])
+
+        # median filter
+        img_back = 255 * (img_back - img_back.min()) / (img_back.max() - img_back.min())
+        img_back = img_back.astype(np.uint8)
+        img_back = cv2.medianBlur(img_back, 7)
+
+        # power law transform
+        img_back = np.array(255*(img_back/(img_back.max() - img_back.min()))**3, dtype='uint8')
+        output = img_back.copy()
+        output = adjust_sigmoid(output, cutoff=0.0001, gain=20)
+
+        if self.plot_detail:
+            plt.figure()
+            plt.hist(output.flatten(), bins=700)
+            plt.show()
+
+            plt.figure(dpi=150, figsize=(8, 8))
+            plt.imshow(im, cmap='gray')
+            plt.axis("off")
+            plt.show()
+
+            plt.figure(dpi=150, figsize=(8, 8))
+            plt.imshow(self.im_f.f_domain, cmap='gray')
+            plt.axis("off")
+            plt.show()
+
+            plt.figure(dpi=150, figsize=(8, 8))
+            plt.imshow(img_back, cmap='gray')
+            plt.colorbar()
+            plt.axis("off")
+            plt.show()
+
+            plt.figure(dpi=150, figsize=(8, 8))
+            plt.imshow(output, cmap='gray')
+            plt.title(str(self.target))
+            plt.colorbar()
+            plt.axis("off")
+            plt.show()
+        return output
+
+    def shift_image(self, x, y):
+        M = np.float32([[1, 0, x], [0, 1, y]])
+        shifted = cv2.warpAffine(self.im_f.img, M, (self.im_f.img.shape[1], self.im_f.img.shape[0]))
+        return shifted
+
+    def match(self, ratio, shift_x, shift_y, plot_overlay, plot_detail=False):
+        self.plot_overlay = plot_overlay
+        self.plot_detail = plot_detail
+        self.im_f.img = self.fluor_preprocessing(ratio=ratio)
+
         ratio = (self.m / self.viework_pixel) / (self.m_obj / self.point_gray_pixel)
         new_size = int(self.im_f.img.shape[0] * ratio)
         self.im_f.img = cv2.resize(self.im_f.img, (new_size, new_size), interpolation=cv2.INTER_CUBIC)
@@ -490,15 +571,25 @@ class MatchFlourPhase(object):
         b = self.im_f.img.shape[0]
         start = b // 2 - IMAGESIZE // 2
         end = b // 2 + IMAGESIZE // 2
-        self.im_f.img = self.im_f.img[start - shift_y: end - shift_y, start - shift_x: end - shift_x]
+
+        # shift image
+        self.im_f.img = self.shift_image(shift_x, shift_y)
+        # crop image to 3072
+        self.im_f.img = self.im_f.img[start: end, start: end]
+
+        # easy to match
+        if plot_overlay:
+            self.overlay_image()
 
         # subplots
         fig, axes = plt.subplots(nrows=1, ncols=2, dpi=200, figsize=(25, 10))
-        im0 = axes[0].imshow(self.im.img, cmap='gray')
+        im0 = axes[0].imshow(self.im, cmap='jet', vmax=MAXPHASE, vmin=MINPHASE)
         axes[0].set_title("Phase image", fontsize=30)
+        axes[0].axis('off')
 
         im1 = axes[1].imshow(self.im_f.img, cmap=green)
         axes[1].set_title("Fluorescent image", fontsize=30)
+        axes[1].axis('off')
 
         fig.subplots_adjust(right=1)
         cbar_ax0 = fig.add_axes([0.47, 0.1, 0.02, 0.8])
@@ -507,6 +598,27 @@ class MatchFlourPhase(object):
         cbar_ax0.set_title('rad')
         fig.colorbar(im1, cax=cbar_ax1)
         cbar_ax1.set_title('a.u.')
+        plt.show()
+
+    def overlay_image(self):
+
+        # phase to uint8
+        showshow = self.im.copy()
+        showshow[self.im >= MAXPHASE] = MAXPHASE
+        showshow[self.im <= MINPHASE] = MINPHASE
+        showshow = 255 * (showshow - MINPHASE) / (MAXPHASE - MINPHASE)
+        showshow = cv2.cvtColor(showshow.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+        show_fluor = np.zeros((IMAGESIZE, IMAGESIZE, 3), np.uint8)
+
+        # reinforce color
+        show_fluor[:, :, 1] = self.im_f.img - 125
+        show_fluor[:, :, 1] = adjust_sigmoid(show_fluor[:, :, 1], cutoff=0.15, gain=40)
+        show_img = cv2.addWeighted(showshow, 0.5, show_fluor, 0.5, 0.0, dtype=cv2.CV_8UC3)
+
+        # plot
+        plt.figure(dpi=150, figsize=(8, 8))
+        plt.imshow(show_img, cmap='gray')
+        plt.title(str(self.target) + " overlay")
         plt.show()
 
     def save(self, pathandname):
@@ -600,9 +712,10 @@ class CellLabelOneImage(WorkFlow):
     def __phase2uint8(self):
         plt.figure(dpi=200, figsize=(10, 10))
         plt.title(str(self.target) + " original image")
-        plt.imshow(self.img, cmap='jet', vmax=2.5, vmin=MINPHASE)
+        plt.imshow(self.img, cmap='jet', vmax=MAXPHASE, vmin=MINPHASE)
         plt.axis("off")
         plt.show()
+
         self.img[self.img >= 4] = 0
         self.img[self.img <= -0.5] = -0.5
         max_value = self.img.max()
@@ -611,6 +724,14 @@ class CellLabelOneImage(WorkFlow):
         t, image_rescale = cv2.threshold(image_rescale, 255, 255, cv2.THRESH_TRUNC)
         t, image_rescale = cv2.threshold(image_rescale, 0, 0, cv2.THRESH_TOZERO)
         self.img = np.uint8(np.round(image_rescale))
+
+        # gray_values = np.arange(256, dtype=np.uint8)
+        # color_values = map(tuple, cv2.applyColorMap(gray_values, cv2.COLORMAP_JET).reshape(256, 3))
+        # color_to_gray_map = dict(zip(color_values, gray_values))
+        # cv2.namedWindow(str(self.target) + " original image", cv2.WINDOW_NORMAL)
+        # cv2.imshow(str(self.target) + " original image", )
+        # cv2.resizeWindow(str(self.target) + " original image", 640, 640)
+
         if self.plot_mode:
             self.__plot_gray(self.img, "original image")
         return self.img
@@ -1336,11 +1457,13 @@ class AnalysisCellFeature(WorkFlow):
 class Fov(WorkFlow):
     def __init__(self, root):
         super().__init__(root)
-        file_number = len(glob.glob(self.root + "[0-9]*"))
+        self.file_list = glob.glob(self.phase_npy_path + "[0-9]*")
+        file_number = len(self.file_list)
         print("Found ", file_number, "pair image")
-        self.file_list = [self.phase_npy_path + str(p) + "_phase.npy" for p in range(1, file_number+1)]
-        self.pic_save = [self.pic_path + str(p) + ".png" for p in range(1, file_number+1)]
-        self.cur_num = [str(p) for p in range(1, file_number+1)]
+        self.pic_save = [file.replace(self.phase_npy_path, self.pic_path) for file in self.file_list]
+        self.pic_save = [file.replace("_phase.npy", ".png") for file in self.pic_save]
+        self.cur_num = [file.replace(self.phase_npy_path, "") for file in self.file_list]
+        self.cur_num = [file.replace("_phase.npy", "") for file in self.cur_num]
         self.__check_file_combo()
 
     def __check_file_combo(self):

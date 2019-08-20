@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pandas as pd
 from btimage import check_file_exist
-from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow, AnalysisCellFeature
+from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow, AnalysisCellFeature, MatchFluorPhase
 from btimage import TimeLapseCombo
 import glob
 from matplotlib import pyplot as plt
@@ -96,21 +96,19 @@ def ewma_vectorized(data, alpha, offset=None, dtype=None, order='C', out=None):
 def first_derivatives(array, dx=1):
     return np.diff(array)/dx
 
-
-
-
-root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
+root_path = r"E:\DPM\20190819\1\time-lapse" + "\\"
 ####################################################################################
 
-# TimeLapseCombo(root_path=root_path).combo(target=25, save=False, strategy="try", sp=(1, -2), bg=(0, 3))
+# TimeLapseCombo(root_path=root_path).combo(target=35, save=True, strategy="cheat", sp=(0, 0), bg=(0, 0))
 
 ####################################################################################
 # Fov(root_path).run()
-
+for i in range(39, 40):
+    MatchFluorPhase(root_path, target=i).match(0.6, -95, -40, plot_overlay=True)
 ###################################################################################
 # label and match
 
-# current_target = 2
+# current_target = 6
 # after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="first", save_water=False)
 #
 # plt.figure()
@@ -124,17 +122,17 @@ root_path = "E:\\DPM\\20190708_time_lapse_succ\\Bead\\1\\SP\\time-lapse\\"
 
 
 ####################################################################################
-# # peek the data
-passward = getenv("DBPASS")
-engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
-Session = sessionmaker(bind=engine, autoflush=False)
-sess = Session()
-
-a = sess.query(RetinalPigmentEpithelium).all()
-print(len(a))
-
-sql = '''select * from retinalpigmentepithelium;'''
-df = pd.read_sql_query(sql, engine)
+# # # peek the data
+# passward = getenv("DBPASS")
+# engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
+# Session = sessionmaker(bind=engine, autoflush=False)
+# sess = Session()
+#
+# a = sess.query(RetinalPigmentEpithelium).all()
+# print(len(a))
+#
+# sql = '''select * from retinalpigmentepithelium;'''
+# df = pd.read_sql_query(sql, engine)
 
 # target = 40
 # a = sess.query(RetinalPigmentEpithelium).filter(RetinalPigmentEpithelium.year == 2019
