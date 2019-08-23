@@ -96,25 +96,25 @@ def ewma_vectorized(data, alpha, offset=None, dtype=None, order='C', out=None):
 def first_derivatives(array, dx=1):
     return np.diff(array)/dx
 
-root_path = r"E:\DPM\20190819\1\time-lapse" + "\\"
+
+root_path = r"E:\DPM\20190822" + "\\"
 ####################################################################################
 
 # TimeLapseCombo(root_path=root_path).combo(target=35, save=True, strategy="cheat", sp=(0, 0), bg=(0, 0))
 
 ####################################################################################
 # Fov(root_path).run()
-for i in range(39, 40):
-    MatchFluorPhase(root_path, target=i).match(0.6, -95, -40, plot_overlay=True)
+# MatchFluorPhase(root_path, target=35).match(0.30, -130, -330, plot_overlay=True, plot_detail=False, save=True)
 ###################################################################################
 # label and match
 
-# current_target = 6
-# after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="first", save_water=False)
-#
+current_target = 3
+# after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="old", save_water=True)
+output = PrevNowCombo(root_path).combo(now_target=current_target, save=True)
+
 # plt.figure()
 # plt.imshow(after, cmap='jet')
 # plt.show()
-# output = PrevNowCombo(root_path).combo(now_target=current_target, save=False)
 # ####################################################################################
 # analysis
 

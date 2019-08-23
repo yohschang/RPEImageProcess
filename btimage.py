@@ -208,12 +208,14 @@ class BT_image(object):
         max_y, max_x = np.unravel_index(np.argmax(tem_crop), tem_crop.shape)
         x_final = x_start + max_x + sx
         y_final = y_start + max_y + sy
+
         crop_f_domain_test = 20 * np.log(self.f_domain[y_final-width//2:y_final+width//2, x_final-height//2:x_final+height//2])
         self.crop_f_domain = self.f_domain[y_final-width//2:y_final+width//2, x_final-height//2:x_final+height//2]
 
         # step 4
         self.crop_raw_f_domain = self.raw_f_domain[y_final-width//2:y_final+width//2, x_final-height//2:x_final+height//2]
-        return self.crop_f_domain, tem_crop, x_final, y_final, crop_f_domain_test
+        print(self.crop_raw_f_domain[width//2, height//2])
+        return self.crop_raw_f_domain[width//2, height//2]
 
 
 class WorkFlow(object):
@@ -303,10 +305,12 @@ class PhaseRetrieval(object):
         # ----------------------------------------------------------------
 
         # shift
-        sp_mean = np.mean(self.unwarpped_sp)
-        bg_mean = np.mean(self.unwarpped_bg)
-        self.unwarpped_sp += np.pi * self.shift(sp_mean)
-        self.unwarpped_bg += np.pi * self.shift(bg_mean)
+        # sp_mean = np.mean(self.unwarpped_sp)
+        # print("sp mean:", sp_mean)
+        # bg_mean = np.mean(self.unwarpped_bg)
+        # print("bg mean:", bg_mean)
+        # self.unwarpped_sp += np.pi * self.shift(sp_mean)
+        # self.unwarpped_bg += np.pi * self.shift(bg_mean)
 
         # resize
         self.final_sp = self.resize_image(self.unwarpped_sp, self.image_size)
@@ -315,9 +319,12 @@ class PhaseRetrieval(object):
         # subtract
         self.final = self.final_sp - self.final_bg
 
-        # m_factor
+        # shift
+        final_mean = np.mean(self.final)
+        print("final mean:", final_mean)
         diff = M - np.mean(self.final)
         self.final = self.final + diff
+
 
     def try_the_position(self, bt_obj):
         min_sd = 10000
@@ -374,9 +381,9 @@ class PhaseRetrieval(object):
         """beware of Memory"""
         plt.figure(dpi=200, figsize=(10, 10))
         if center:
-            plt.imshow(self.final[1500:1700, 1500:1700], vmin=-1, vmax=MAXPHASE)
+            plt.imshow(self.final[1500:1700, 1500:1700], vmin=MINPHASE, vmax=MAXPHASE)
         else:
-            plt.imshow(self.final, cmap='jet', vmin=-0.5, vmax=3)
+            plt.imshow(self.final, cmap='jet', vmin=MINPHASE, vmax=MAXPHASE)
         plt.colorbar()
         plt.title("sp - bg"+str(num))
         plt.show()
@@ -433,8 +440,6 @@ class TimeLapseCombo(WorkFlow):
                 try:
                     pr.phase_retrieval(sp, bg, strategy=strategy)
                     print(str(i), " SD:", np.std(pr.final))
-                    if np.std(pr.final) > self.SD_threshold:
-                        pr.phase_retrieval(sp, bg, strategy=strategy)
                     pr.plot_final(center=False, num=i)
                     # pr.plot_hist()
                     if save:
@@ -447,8 +452,6 @@ class TimeLapseCombo(WorkFlow):
             # specific target
             pr = PhaseRetrieval(self.pathsp_list[target-1], self.pathbg_list[0])
             pr.phase_retrieval(sp, bg, strategy=strategy)
-            if np.std(pr.final) > self.SD_threshold:
-                pr.phase_retrieval(sp, bg, strategy=strategy)
             pr.plot_final(center=False, num=target)
             # pr.plot_hist()
             pr.plot_sp_bg()
@@ -471,6 +474,7 @@ class MatchFluorPhase(WorkFlow):
         self.target = target
         self.plot_overlay = False
         self.plot_detail = False
+        self.save_path = self.fluor_path + str(target) + "_fluor.png"
 
         # read phase image
         check_file_exist(path_phasemap, "phase image")
@@ -489,11 +493,11 @@ class MatchFluorPhase(WorkFlow):
         self.viework_pixel = 5.5
         self.point_gray_pixel = 5.5
 
-    def fluor_preprocessing(self, ratio):
+    def fluor_preprocessing(self, cut):
         self.im_f.twodfft()
 
         # read filter
-        filter = r"E:\DPM\20190819\1\time-lapse\fluor\Filter.tif"
+        filter = r"E:\DPM\20190822\fluor\Filter.tif"
         check_file_exist(filter, "band pass filter")
         im = np.array(Image.open(filter))
 
@@ -520,9 +524,8 @@ class MatchFluorPhase(WorkFlow):
         img_back = cv2.medianBlur(img_back, 7)
 
         # power law transform
-        img_back = np.array(255*(img_back/(img_back.max() - img_back.min()))**3, dtype='uint8')
-        output = img_back.copy()
-        output = adjust_sigmoid(output, cutoff=0.0001, gain=20)
+        output = np.array(255*(img_back/(img_back.max() - img_back.min()))**0.9, dtype='uint8')
+        output = adjust_sigmoid(output, cutoff=cut, gain=20)
 
         if self.plot_detail:
             plt.figure()
@@ -558,10 +561,10 @@ class MatchFluorPhase(WorkFlow):
         shifted = cv2.warpAffine(self.im_f.img, M, (self.im_f.img.shape[1], self.im_f.img.shape[0]))
         return shifted
 
-    def match(self, ratio, shift_x, shift_y, plot_overlay, plot_detail=False):
+    def match(self, cut, shift_x, shift_y, plot_overlay, plot_detail=False, save=False):
         self.plot_overlay = plot_overlay
         self.plot_detail = plot_detail
-        self.im_f.img = self.fluor_preprocessing(ratio=ratio)
+        self.im_f.img = self.fluor_preprocessing(cut=cut)
 
         ratio = (self.m / self.viework_pixel) / (self.m_obj / self.point_gray_pixel)
         new_size = int(self.im_f.img.shape[0] * ratio)
@@ -581,24 +584,29 @@ class MatchFluorPhase(WorkFlow):
         if plot_overlay:
             self.overlay_image()
 
-        # subplots
-        fig, axes = plt.subplots(nrows=1, ncols=2, dpi=200, figsize=(25, 10))
-        im0 = axes[0].imshow(self.im, cmap='jet', vmax=MAXPHASE, vmin=MINPHASE)
-        axes[0].set_title("Phase image", fontsize=30)
-        axes[0].axis('off')
+        if self.plot_detail:
+            # subplots
+            fig, axes = plt.subplots(nrows=1, ncols=2, dpi=200, figsize=(25, 10))
+            im0 = axes[0].imshow(self.im, cmap='jet', vmax=MAXPHASE, vmin=MINPHASE)
+            axes[0].set_title("Phase image", fontsize=30)
+            axes[0].axis('off')
 
-        im1 = axes[1].imshow(self.im_f.img, cmap=green)
-        axes[1].set_title("Fluorescent image", fontsize=30)
-        axes[1].axis('off')
+            im1 = axes[1].imshow(self.im_f.img, cmap=green)
+            axes[1].set_title("Fluorescent image", fontsize=30)
+            axes[1].axis('off')
 
-        fig.subplots_adjust(right=1)
-        cbar_ax0 = fig.add_axes([0.47, 0.1, 0.02, 0.8])
-        cbar_ax1 = fig.add_axes([0.93, 0.1, 0.02, 0.8])
-        fig.colorbar(im0, cax=cbar_ax0)
-        cbar_ax0.set_title('rad')
-        fig.colorbar(im1, cax=cbar_ax1)
-        cbar_ax1.set_title('a.u.')
-        plt.show()
+            fig.subplots_adjust(right=1)
+            cbar_ax0 = fig.add_axes([0.47, 0.1, 0.02, 0.8])
+            cbar_ax1 = fig.add_axes([0.93, 0.1, 0.02, 0.8])
+            fig.colorbar(im0, cax=cbar_ax0)
+            cbar_ax0.set_title('rad')
+            fig.colorbar(im1, cax=cbar_ax1)
+            cbar_ax1.set_title('a.u.')
+            plt.show()
+
+        if save:
+            print("save ", self.save_path)
+            cv2.imwrite(self.save_path, self.im_f.img)
 
     def overlay_image(self):
 
@@ -611,8 +619,8 @@ class MatchFluorPhase(WorkFlow):
         show_fluor = np.zeros((IMAGESIZE, IMAGESIZE, 3), np.uint8)
 
         # reinforce color
-        show_fluor[:, :, 1] = self.im_f.img - 125
-        show_fluor[:, :, 1] = adjust_sigmoid(show_fluor[:, :, 1], cutoff=0.15, gain=40)
+        show_fluor[:, :, 1] = self.im_f.img
+        show_fluor[:, :, 1] = adjust_sigmoid(show_fluor[:, :, 1], cutoff=0.5, gain=10)
         show_img = cv2.addWeighted(showshow, 0.5, show_fluor, 0.5, 0.0, dtype=cv2.CV_8UC3)
 
         # plot
@@ -1105,7 +1113,7 @@ class PrevNowMatching(object):
     def __check_prev_label(self):
         for label in range(90):
             cur_label_num = len(self.prev_label_map[self.prev_label_map == label])
-            if 4000 <= cur_label_num <= 1000000:
+            if 2000 <= cur_label_num <= 1000000:
                 # remove too small area and BG area
                 self.prev_list.append(label)
                 # print("label:", label, "has:", cur_label_num, "pixel")
@@ -1113,7 +1121,7 @@ class PrevNowMatching(object):
     def __check_now_label(self):
         for label in range(90):
             cur_label_num = len(self.now_label_map[self.now_label_map == label])
-            if 4000 <= cur_label_num <= 1000000:
+            if 2000 <= cur_label_num <= 1000000:
                 # remove too small area and BG area
                 self.now_list.append(label)
                 # print("label:", label, "has:", cur_label_num, "pixel")
