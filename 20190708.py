@@ -1,120 +1,122 @@
-import os
-import cv2
-import numpy as np
-import pandas as pd
-from btimage import check_file_exist
-from btimage import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow, AnalysisCellFeature, MatchFluorPhase
-from btimage import TimeLapseCombo
-import glob
+# import os
+# import cv2
+# import numpy as np
+# import pandas as pd
+# from btimage import check_file_exist
+from btimageorigin import BT_image, CellLabelOneImage, PrevNowCombo, TimeLapseCombo, Fov, WorkFlow, AnalysisCellFeature
+# from btimage import TimeLapseCombo
+# import glob
 from matplotlib import pyplot as plt
-from os import getenv
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from databaseORM import RetinalPigmentEpithelium
-from scipy.ndimage.filters import gaussian_filter1d
+# from os import getenv
+# from sqlalchemy import create_engine
+# from sqlalchemy.orm import sessionmaker
+# from databaseORM import RetinalPigmentEpithelium
+# from scipy.ndimage.filters import gaussian_filter1d
+
+#
+# def normalize(array):
+#     max_value = max(array)
+#     min_value = min(array)
+#     return list(map(lambda old: (old - min_value) / (max_value - min_value), array))
+#
+#
+# def moving_average(array, moving_window):
+#     array = np.convolve(array, np.ones((moving_window,)) / moving_window, mode='same')
+#     return array
+#
+#
+# def ewma_vectorized(data, alpha, offset=None, dtype=None, order='C', out=None):
+#     """
+#     Calculates the exponential moving average over a vector.
+#     Will fail for large inputs.
+#     :param data: Input data
+#     :param alpha: scalar float in range (0,1)
+#         The alpha parameter for the moving average.
+#     :param offset: optional
+#         The offset for the moving average, scalar. Defaults to data[0].
+#     :param dtype: optional
+#         Data type used for calculations. Defaults to float64 unless
+#         data.dtype is float32, then it will use float32.
+#     :param order: {'C', 'F', 'A'}, optional
+#         Order to use when flattening the data. Defaults to 'C'.
+#     :param out: ndarray, or None, optional
+#         A location into which the result is stored. If provided, it must have
+#         the same shape as the input. If not provided or `None`,
+#         a freshly-allocated array is returned.
+#     """
+#     data = np.array(data, copy=False)
+#
+#     if dtype is None:
+#         if data.dtype == np.float32:
+#             dtype = np.float32
+#         else:
+#             dtype = np.float64
+#     else:
+#         dtype = np.dtype(dtype)
+#
+#     if data.ndim > 1:
+#         # flatten input
+#         data = data.reshape(-1, order)
+#
+#     if out is None:
+#         out = np.empty_like(data, dtype=dtype)
+#     else:
+#         assert out.shape == data.shape
+#         assert out.dtype == dtype
+#
+#     if data.size < 1:
+#         # empty input, return empty array
+#         return out
+#
+#     if offset is None:
+#         offset = data[0]
+#
+#     alpha = np.array(alpha, copy=False).astype(dtype, copy=False)
+#
+#     # scaling_factors -> 0 as len(data) gets large
+#     # this leads to divide-by-zeros below
+#     scaling_factors = np.power(1. - alpha, np.arange(data.size + 1, dtype=dtype),
+#                                dtype=dtype)
+#     # create cumulative sum array
+#     np.multiply(data, (alpha * scaling_factors[-2]) / scaling_factors[:-1],
+#                 dtype=dtype, out=out)
+#     np.cumsum(out, dtype=dtype, out=out)
+#
+#     # cumsums / scaling
+#     out /= scaling_factors[-2::-1]
+#
+#     if offset != 0:
+#         offset = np.array(offset, copy=False).astype(dtype, copy=False)
+#         # add offsets
+#         out += offset * scaling_factors[1:]
+#
+#     return out
+#
+#
+# def first_derivatives(array, dx=1):
+#     return np.diff(array)/dx
 
 
-def normalize(array):
-    max_value = max(array)
-    min_value = min(array)
-    return list(map(lambda old: (old - min_value) / (max_value - min_value), array))
 
 
-def moving_average(array, moving_window):
-    array = np.convolve(array, np.ones((moving_window,)) / moving_window, mode='same')
-    return array
-
-
-def ewma_vectorized(data, alpha, offset=None, dtype=None, order='C', out=None):
-    """
-    Calculates the exponential moving average over a vector.
-    Will fail for large inputs.
-    :param data: Input data
-    :param alpha: scalar float in range (0,1)
-        The alpha parameter for the moving average.
-    :param offset: optional
-        The offset for the moving average, scalar. Defaults to data[0].
-    :param dtype: optional
-        Data type used for calculations. Defaults to float64 unless
-        data.dtype is float32, then it will use float32.
-    :param order: {'C', 'F', 'A'}, optional
-        Order to use when flattening the data. Defaults to 'C'.
-    :param out: ndarray, or None, optional
-        A location into which the result is stored. If provided, it must have
-        the same shape as the input. If not provided or `None`,
-        a freshly-allocated array is returned.
-    """
-    data = np.array(data, copy=False)
-
-    if dtype is None:
-        if data.dtype == np.float32:
-            dtype = np.float32
-        else:
-            dtype = np.float64
-    else:
-        dtype = np.dtype(dtype)
-
-    if data.ndim > 1:
-        # flatten input
-        data = data.reshape(-1, order)
-
-    if out is None:
-        out = np.empty_like(data, dtype=dtype)
-    else:
-        assert out.shape == data.shape
-        assert out.dtype == dtype
-
-    if data.size < 1:
-        # empty input, return empty array
-        return out
-
-    if offset is None:
-        offset = data[0]
-
-    alpha = np.array(alpha, copy=False).astype(dtype, copy=False)
-
-    # scaling_factors -> 0 as len(data) gets large
-    # this leads to divide-by-zeros below
-    scaling_factors = np.power(1. - alpha, np.arange(data.size + 1, dtype=dtype),
-                               dtype=dtype)
-    # create cumulative sum array
-    np.multiply(data, (alpha * scaling_factors[-2]) / scaling_factors[:-1],
-                dtype=dtype, out=out)
-    np.cumsum(out, dtype=dtype, out=out)
-
-    # cumsums / scaling
-    out /= scaling_factors[-2::-1]
-
-    if offset != 0:
-        offset = np.array(offset, copy=False).astype(dtype, copy=False)
-        # add offsets
-        out += offset * scaling_factors[1:]
-
-    return out
-
-
-def first_derivatives(array, dx=1):
-    return np.diff(array)/dx
-
-
-root_path = r"E:\DPM\20190822" + "\\"
+root_path = "D:\\1LAB\\timelapse\\interfereogram\\"
 ####################################################################################
 
-# TimeLapseCombo(root_path=root_path).combo(target=35, save=True, strategy="cheat", sp=(0, 0), bg=(0, 0))
+# TimeLapseCombo(root_path=root_path).combo(target=25, save=False, strategy="try", sp=(1, -2), bg=(0, 3))
 
 ####################################################################################
 # Fov(root_path).run()
-# MatchFluorPhase(root_path, target=35).match(0.30, -130, -330, plot_overlay=True, plot_detail=False, save=True)
+
 ###################################################################################
 # label and match
+#
+current_target = 2
+after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="first", save_water=False)
 
-current_target = 3
-# after = CellLabelOneImage(root_path, target=current_target).run(adjust=True, plot_mode=False, load="old", save_water=True)
-output = PrevNowCombo(root_path).combo(now_target=current_target, save=True)
-
-# plt.figure()
-# plt.imshow(after, cmap='jet')
-# plt.show()
+plt.figure()
+plt.imshow(after, cmap='jet')
+plt.show()
+output = PrevNowCombo(root_path).combo(now_target=current_target, save=False)
 # ####################################################################################
 # analysis
 
@@ -122,7 +124,7 @@ output = PrevNowCombo(root_path).combo(now_target=current_target, save=True)
 
 
 ####################################################################################
-# # # peek the data
+# # peek the data
 # passward = getenv("DBPASS")
 # engine = create_engine('mysql+pymysql://BT:' + passward + '@127.0.0.1:3306/Cell')
 # Session = sessionmaker(bind=engine, autoflush=False)

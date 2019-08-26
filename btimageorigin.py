@@ -38,7 +38,7 @@ import glob
 import tqdm
 from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
-import sys
+
 
 # from databaseORM import RetinalPigmentEpithelium
 from colorbarforAPP import *
@@ -260,7 +260,6 @@ class PhaseRetrieval(object):
         self.image_size = IMAGESIZE
 
     def phase_retrieval(self, sp=(0, 0), bg=(0, 0), strategy="try"):
-        sys.stdout = open('file.txt', "a+")
         # open img
         self.sp.open_image()
         self.bg.open_image()
@@ -315,7 +314,6 @@ class PhaseRetrieval(object):
         # m_factor
         diff = M - np.mean(self.final)
         self.final = self.final + diff
-        sys.stdout.close()
 
     def try_the_position(self, bt_obj):
         min_sd = 10000
@@ -366,7 +364,6 @@ class PhaseRetrieval(object):
         fig.subplots_adjust(right=1)
         cbar_ax = fig.add_axes([0.47, 0.1, 0.02, 0.8])
         fig.colorbar(im, cax=cbar_ax)
-        plt.ioff()
         plt.show()
 
     def plot_final(self, center=False, num=0):
@@ -391,7 +388,6 @@ class PhaseRetrieval(object):
 
 
 class TimeLapseCombo(WorkFlow):
-    sys.stdout = open('file.txt', 'w')
     def __init__(self, root_path):
         super().__init__(root_path)
         self.pathsp_list = []
@@ -400,7 +396,6 @@ class TimeLapseCombo(WorkFlow):
         self.SD_threshold = 1.51
 
     def __read(self):
-        sys.stdout = open('file.txt', 'w')
         """ private """
         file_number = len(glob.glob(self.root + "[0-9]*"))
         print("Found ", file_number, "pair image")
@@ -422,16 +417,15 @@ class TimeLapseCombo(WorkFlow):
                 raise FileExistsError("SP lost or too many SP")
             print("SP:", found_file[0])
             self.pathsp_list.append(found_file[0])
-        sys.stdout.close()
+
     def combo(self, target=-1, save=False, strategy="try", sp=(0, 0), bg=(0, 0)):
         """ target is the number of image """
         self.__read()
-        plt.ion()
+
         if target == -1:
             # combo
             for i, m in zip(range(len(self.pathsp_list)), np.arange(0.3, 0, -0.3/40)):
                 pr = PhaseRetrieval(self.pathsp_list[i], self.pathbg_list[0])
-                sys.stdout = open('file.txt', 'a+')
                 try:
                     pr.phase_retrieval(sp, bg, strategy=strategy)
                     print(str(i), " SD:", np.std(pr.final))
@@ -444,13 +438,11 @@ class TimeLapseCombo(WorkFlow):
                         self.cur_num += 1
                 except TypeError as e:
                     print(i, "th cannot be retrieved ", e)
-                sys.stdout.close()
 
         elif target > 0:
             # specific target
             pr = PhaseRetrieval(self.pathsp_list[target-1], self.pathbg_list[0])
             pr.phase_retrieval(sp, bg, strategy=strategy)
-            sys.stdout = open('file.txt', 'a+')
             if np.std(pr.final) > self.SD_threshold:
                 pr.phase_retrieval(sp, bg, strategy=strategy)
             pr.plot_final(center=False, num=target)
@@ -465,7 +457,7 @@ class TimeLapseCombo(WorkFlow):
                 # pr.write_final(output_dir)
         else:
             raise IndexError("Invalid target number!")
-        sys.stdout.close()
+
 
 class MatchFlourPhase(object):
     def __init__(self, path_phasemap, path_flour):
@@ -551,9 +543,9 @@ class CellLabelOneImage(WorkFlow):
         self.__distance_trans()
         self.__find_local_max()
         self.__watershed_algorithm()
+
         if adjust:
             if load == "old":
-                sys.stdout = open('file.txt', "a+")
                 try:
                     # load saved marker
                     print("load saved marker", str(self.target) + "_marker.npy")
@@ -564,9 +556,7 @@ class CellLabelOneImage(WorkFlow):
                     print("load previous marker", str(self.target-1) + "_marker.npy")
                     marker_file = self.marker_path + str(self.target-1) + "_marker.npy"
                     check_file_exist(marker_file, str(self.target-1) + "_marker.npy")
-                sys.stdout.close()
 
-                sys.stdout = open('file.txt', "a+")
                 try:
                     # load previous afterwater
                     print("load previous afterwater", str(self.target-1) + "_afterwater.npy")
@@ -574,10 +564,8 @@ class CellLabelOneImage(WorkFlow):
                     check_file_exist(afterwater_file, str(self.target-1) + "_afterwater.npy")
                 except OSError:
                     raise Exception("Must use previous afterwater!")
-                sys.stdout.close()
 
             elif load == "first":
-                sys.stdout = open('file.txt', "a+")
                 try:
                     marker_file = self.marker_path + str(self.target) + "_marker.npy"
                     check_file_exist(marker_file, str(self.target) + "_marker.npy")
@@ -585,7 +573,6 @@ class CellLabelOneImage(WorkFlow):
                     print("No ", str(self.target) + "_marker.npy")
                     marker_file = None
                 afterwater_file = None
-                sys.stdout.close()
 
             elif load == "no":
                 marker_file = None
@@ -595,18 +582,13 @@ class CellLabelOneImage(WorkFlow):
             self.__watershed_manually(marker_file, afterwater_file)
 
         if save_water:
-            sys.stdout = open('file.txt', "a+")
             np.save(self.afterwater_path + str(self.target) + "_afterwater.npy", self.after_water)
             print("saving  ", self.afterwater_path + str(self.target) + "_afterwater.npy")
-            sys.stdout.close()
 
         if self.after_water is None:
-            sys.stdout = open('file.txt', "a+")
             raise EOFError("You must go watershed once!")
-            sys.stdout.close()
+
         return self.after_water
-
-
 
     def __plot_gray(self, image, title_str):
         plt.figure()
@@ -616,11 +598,11 @@ class CellLabelOneImage(WorkFlow):
         plt.show()
 
     def __phase2uint8(self):
-        # plt.figure(dpi=200, figsize=(10, 10))
-        # plt.title(str(self.target) + " original image")
-        # plt.imshow(self.img, cmap='jet', vmax=2.5, vmin=MINPHASE)
-        # plt.axis("off")
-        # plt.show(block = False)
+        plt.figure(dpi=200, figsize=(10, 10))
+        plt.title(str(self.target) + " original image")
+        plt.imshow(self.img, cmap='jet', vmax=2.5, vmin=MINPHASE)
+        plt.axis("off")
+        plt.show()
         self.img[self.img >= 4] = 0
         self.img[self.img <= -0.5] = -0.5
         max_value = self.img.max()
@@ -661,7 +643,6 @@ class CellLabelOneImage(WorkFlow):
             plt.show()
 
     def __adaptive_threshold(self):
-        sys.stdout = open('file.txt',"w")
         array_image = self.img.flatten()
         # plt.figure()
         n, b, patches = plt.hist(array_image, bins=200)
@@ -685,7 +666,6 @@ class CellLabelOneImage(WorkFlow):
         # ret, self.img = cv2.threshold(self.img, threshold, 255, cv2.THRESH_BINARY)
         if self.plot_mode:
             self.__plot_gray(self.img, "binary image")
-        sys.stdout.close()
 
     def __morphology_operator(self):
         kernel = np.ones((3, 3), np.uint8)
@@ -757,10 +737,8 @@ class CellLabelOneImage(WorkFlow):
         """Implement App"""
         self.img_origin = cv2.cvtColor(self.img_origin, cv2.COLOR_GRAY2BGR)
         self.distance_img = cv2.cvtColor(np.uint8(self.distance_img), cv2.COLOR_GRAY2BGR)
-        sys.stdout = open('file.txt',"a+")
         print(App.__doc__)
-        sys.stdout.close()
-        sys.stdout = open('file.txt', "a+")
+
         if marker_file:
             try:
                 self.pre_marker = np.load(marker_file)
@@ -775,10 +753,8 @@ class CellLabelOneImage(WorkFlow):
         else:
             afterwater = np.zeros((IMAGESIZE, IMAGESIZE), dtype=np.uint8)
 
-
         r = App(self.distance_img, self.pre_marker, self.img_origin, save_path=self.marker_path, cur_img_num=self.target, afterwater=afterwater)
         r.run()
-        sys.stdout.close()
         self.after_water = r.m
 
 
@@ -841,7 +817,7 @@ class App(object):
               q    - check two separated regions
               t    - remove current marker
               c    - catch the label on the image
-              l    - use input as label number
+              l    - input the label you want
               right click  - change the diameter of your mouse
               r     - reset
               ESC   - exit and save afterwater.npy
@@ -910,40 +886,22 @@ class App(object):
 
             if ch == ord("0"):
                 self.cur_marker = 0
-                sys.stdout = open('file.txt',"w")
-                print(App.__doc__)
                 print('marker: ', self.cur_marker)
-                sys.stdout.close()
 
             if ch in [ord('l'), ord('L')]:
-                f = open('file.txt', "r")
-                line = f.readlines()
-                f.close()
-                try :
-                    number = int(line[0])
-                    sys.stdout = open('file.txt', "w")
-                    print(App.__doc__)
-                    if 0 <= number <= 90:
-                        self.cur_marker = number
-                    else:
-                        print("invalid label!")
-                    print('marker: ', self.cur_marker)
-                    sys.stdout.close()
-                except ValueError :
-                    sys.stdout = open('file.txt', "w")
-                    print(App.__doc__)
-                    print("cannot find the number")
-                    sys.stdout.close()
+                input_label = input("input marker:")
+                if 0 <= int(input_label) <= 90:
+                    self.cur_marker = int(input_label)
+                else:
+                    print("invalid label!")
+                print('marker: ', self.cur_marker)
 
             if ch in [ord('t'), ord('T')]:
-                sys.stdout = open('file.txt', "w")
-                print(App.__doc__)
                 if self.cur_marker == 1 or self.cur_marker == 0:
                     print("Cannot delete background label or unknown label!")
                 else:
                     self.markers[self.markers == self.cur_marker] = 0
                     print('reset: ', self.cur_marker, " in the image")
-                sys.stdout.close()
 
             # update watershed
             if ch == ord(' ') or (self.sketch.dirty and self.auto_update):
@@ -951,16 +909,11 @@ class App(object):
                 self.sketch.dirty = False
 
             if ch in [ord('a'), ord('A')]:
-                sys.stdout = open('file.txt', "w")
-                print(App.__doc__)
                 for label in range(85):
                     if len(self.markers[self.markers == label]) == 0:
                         print(label, " is available")
-                sys.stdout.close()
 
             if ch in [ord('q'), ord('Q')]:
-                sys.stdout = open('file.txt', "w")
-                print(App.__doc__)
                 for label in range(2, 85):
                     black = np.zeros((IMAGESIZE, IMAGESIZE), dtype=np.uint8)
                     black[self.m == label] = 255
@@ -968,7 +921,6 @@ class App(object):
                     if ret > 2:
                         print("label ", label, "is too many region!!")
                 print("Q: finish checking!")
-                sys.stdout.close()
 
             # reset
             if ch in [ord('r'), ord('R')]:
@@ -978,21 +930,15 @@ class App(object):
 
             # save
             if ch in [ord('s'), ord('S')]:
-                sys.stdout = open('file.txt', "w")
-                print(App.__doc__)
                 self.__watershed()
                 np.save(self.save_path + str(self.cur_img_num) + "_marker.npy", self.markers)
                 print("save marker to ", self.save_path + str(self.cur_img_num) + "_marker.npy")
-                sys.stdout.close()
 
             # catch the marker
             if ch in [ord('c'), ord('C')]:
-                sys.stdout = open('file.txt', "w")
-                print(App.__doc__)
                 print("track the mouse:", self.sketch.mouse_track)
                 self.cur_marker = self.markers[self.sketch.mouse_track[1], self.sketch.mouse_track[0]]
                 print("marker:", self.cur_marker)
-                sys.stdout.close()
         cv2.destroyAllWindows()
 
 
@@ -1033,7 +979,7 @@ class PrevNowMatching(object):
                 plt.text(x, y, str(i))
         plt.title(text)
         plt.axis("off")
-
+        plt.show()
 
     def __check_prev_label(self):
         for label in range(90):
@@ -1075,10 +1021,11 @@ class PrevNowMatching(object):
             #     plt.show()
 
             # print("prev label:", label, "match --> now label: ", corresponded_label)
-            sys.stdout = open("file.txt", "a+")
+
             if corresponded_label != 1:
                 # registering corresponding label into new_now_map
                 self.output[self.now_label_map == corresponded_label] = label
+
                 # pop corresponded_label
                 try:
                     self.prev_list.remove(label)
@@ -1097,13 +1044,12 @@ class PrevNowMatching(object):
 
             else:
                 print("prev label:", label, "match ", corresponded_label, "what?!")
-            sys.stdout.close()
 
     def __second_round_matching(self):
         """ overlap method"""
         disappear_list = self.prev_list.copy()
         appear_list = self.now_list.copy()
-        sys.stdout = open('file.txt' , "a+")
+
         if appear_list and disappear_list:
             for disappear in disappear_list:
                 for appear in appear_list:
@@ -1130,7 +1076,6 @@ class PrevNowMatching(object):
                 self.lost_map[self.prev_label_map == i] = 100
 
         print("finish second round!")
-        sys.stdout.close()
 
     def __clean_appear(self):
         """clean appear cell"""
@@ -1142,7 +1087,7 @@ class PrevNowMatching(object):
         plt.imshow(self.lost_map, cmap='jet', vmax=255, vmin=0)
         plt.figtext(0.83, 0.5, "g: disappear\no: appear", transform=plt.gcf().transFigure)
         plt.title("lost_map")
-        plt.show(block = False)
+        plt.show()
 
     def __centroid(self, binary_image):
         """ find centroid"""
@@ -1163,7 +1108,6 @@ class PrevNowCombo(WorkFlow):
         self.now = None
 
     def __read(self, now_target):
-        sys.stdout = open('file.txt',"w")
         # load prev and now label map
         prev_file = str(now_target-1) + "_afterwater.npy"
         now_file = str(now_target) + "_afterwater.npy"
@@ -1173,28 +1117,23 @@ class PrevNowCombo(WorkFlow):
         print("load ", now_file)
         check_file_exist(self.afterwater_path + now_file, str(now_file))
         self.now = np.load(self.afterwater_path + now_file)
-        sys.stdout.close()
 
     def combo(self, now_target=-1, save=False):
         """ now_target is the number of image"""
         self.__read(now_target=now_target)
+
         # map
         match = PrevNowMatching(self.prev, self.now)
         output = match.run()
         # plot input
-        plt.ion()
         match.show(match.prev_label_map, str(now_target-1) + " prev_label_map")
         match.show(match.now_label_map, str(now_target) + " now_label_map")
-        plt.ioff()
-        plt.show()
         if save:
-            sys.stdout = open('file.txt', "a+")
             if match.prev_list:
                 print("Cannot save it ! disappear !!")
             else:
                 print("revise ", str(now_target) + "_afterwater.npy")
                 np.save(self.afterwater_path + str(now_target) + "_afterwater.npy", output)
-            sys.stdout.close()
 
 
 ###########################################################################################
@@ -1396,7 +1335,6 @@ class AnalysisCellFeature(WorkFlow):
 
 class Fov(WorkFlow):
     def __init__(self, root):
-        sys.stdout = open('file.txt', 'a+')
         super().__init__(root)
         file_number = len(glob.glob(self.root + "[0-9]*"))
         print("Found ", file_number, "pair image")
@@ -1404,7 +1342,6 @@ class Fov(WorkFlow):
         self.pic_save = [self.pic_path + str(p) + ".png" for p in range(1, file_number+1)]
         self.cur_num = [str(p) for p in range(1, file_number+1)]
         self.__check_file_combo()
-        sys.stdout.close()
 
     def __check_file_combo(self):
         for p in self.file_list:
@@ -1413,7 +1350,6 @@ class Fov(WorkFlow):
     def run(self):
         center = (IMAGESIZE//2, IMAGESIZE//2)
         radius = IMAGESIZE//2
-        sys.stdout = open('file.txt', 'a+')
         for i, im_p, pic_p in zip(self.cur_num, self.file_list, self.pic_save):
             print(im_p)
             img = np.load(im_p)
@@ -1428,6 +1364,4 @@ class Fov(WorkFlow):
             plt.colorbar()
             plt.savefig(pic_p)
             plt.close(i)
-        sys.stdout.close()
-
 
